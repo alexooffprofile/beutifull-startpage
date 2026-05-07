@@ -1,0 +1,36 @@
+{
+    "manifest_version": 2,
+    "name": "Beutifull Starteds Page",
+    "version": "9.0.1.10",
+    "author": "tAllternative",
+
+    "description": "Super duper, have more tools home-new-start page.",
+    
+    "applications": {
+        "gecko": {
+            "id": "beutifull-startedspage@baseminimumutils"
+        }
+    },
+
+    "chrome_url_overrides": {
+        "newtab": "newtab.html"
+    },
+
+    "chrome_settings_overrides" : {
+        "homepage": "newtab.html"
+    },
+
+    "permissions": [
+        "storage",
+        "tabs",
+        "https://suggestqueries.google.com/*",
+        "https://api.frankfurter.app/*"
+        
+    ],
+
+    "icons": {
+        "48": "icons/48.png",
+        "96": "icons/96.png"
+    }
+
+}

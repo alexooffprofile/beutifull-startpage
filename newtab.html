@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link id="favicon" rel="icon" type="image/png" href="icons/default_ico48.png">
+<title>Beutifull New Tab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══ BOOKMARKS PANEL (left side) ══ -->
+<div id="bm-panel" class="bm-collapsed">
+
+  <!-- Toggle button (always visible) -->
+  <button id="bm-toggle" title="Bookmarks">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span id="bm-toggle-label">Bookmarks</span>
+  </button>
+
+  <!-- Panel content (hidden when collapsed) -->
+  <div id="bm-content">
+
+    <!-- Tag filters -->
+    <div id="bm-tags">
+      <button class="bm-tag active" data-tag="all">All</button>
+      <!-- dynamic tags injected by JS -->
+    </div>
+
+    <!-- Add bookmark form -->
+    <div id="bm-add-row">
+      <input id="bm-add-url"   type="text" placeholder="https://…" autocomplete="off" spellcheck="false">
+      <input id="bm-add-title" type="text" placeholder="Title (optional)" autocomplete="off" spellcheck="false">
+      <button id="bm-add-btn" title="Add bookmark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.5" stroke-linecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Bookmark list -->
+    <div id="bm-list"></div>
+  </div>
+</div>
+
+<!-- ══ MAIN PAGE ══ -->
+<div id="page">
+
+  <!-- Clock: top-right -->
+  <div id="clock-wrap">
+    <div id="clock">00:00</div>
+    <div id="date"></div>
+  </div>
+
+  <!-- Search bar: centered between bookmarks and clock -->
+  <div id="search-wrap" tabindex=-1>
+    <div id="dual-bar">
+
+      <!-- LEFT: Search -->
+      <div id="search-side" tabindex=-1>
+        <button id="engine-btn" type="button" tabindex=-1>
+          <span id="eng-icon"><i class="fa-brands fa-google"></i></span>
+          <span id="eng-label">Google</span>
+        </button>
+        <svg id="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="q" type="text" placeholder="Search…" spellcheck="false" autocomplete="off" tabindex=-1>
+        <button id="clear-btn" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- divider -->
+      <div id="bar-divider"></div>
+
+      <!-- RIGHT: Command palette -->
+      <div id="cmd-side">
+        <svg id="cmd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+        <input id="cmd" type="text" placeholder="Command…" spellcheck="false" autocomplete="off" tabindex=-1>
+        <span id="cmd-hint">g · gm · calc</span>
+      </div>
+    </div>
+
+    <!-- Single shared dropdown -->
+    <div id="dropdown"></div>
+  </div>
+
+  <div id="shortcuts">
+    <a class="shortcut" href="https://gmail.com" target="_blank">
+      <div class="shortcut-icon">✉️</div><span>Gmail</span>
+    </a>
+    <a class="shortcut" href="https://github.com" target="_blank">
+      <div class="shortcut-icon">🐙</div><span>GitHub</span>
+    </a>
+    <a class="shortcut" href="https://youtube.com" target="_blank">
+      <div class="shortcut-icon">▶️</div><span>YouTube</span>
+    </a>
+    <a class="shortcut" href="https://translate.google.com" target="_blank">
+      <div class="shortcut-icon">🌐</div><span>Translate</span>
+    </a>
+  </div>
+</div>
+
+<script src="mini_addons.js"></script>
+<script src="main_script.js"></script>
+<script src="bookmarks.js"></script>
+</body>
+</html>
