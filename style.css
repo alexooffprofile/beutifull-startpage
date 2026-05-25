@@ -28,7 +28,7 @@
      Change either here or in bookmarks.js CONFIG.PANEL_WIDTH_PCT
   ──────────────────────────────────────────────────────────── */
   --bm-open-w: 32vw;
-  --bm-col-w:  18px;
+  --bm-col-w:  40px;
 }
 
 /* ─── Base layout ────────────────────────────────────────────── */
@@ -81,13 +81,15 @@ body::before {
   border-left: 2px solid var(--accent);
 }
 
-/* Hover zone injected by JS flush to left edge */
+/* Hover zone injected by JS flush to left edge.
+   z-index: 40 — below panel (z-index:50) so it never blocks
+   clicks on links/buttons inside the open panel. */
 #bm-hover-zone {
   position: fixed;
   top: 0; left: 0;
-  width: 28px;    /* keep in sync with CONFIG.HOVER_ZONE_PX */
+  width: 250px;    /* keep in sync with CONFIG.HOVER_ZONE_PX — wider trigger */
   height: 100%;
-  z-index: 60;
+  z-index: 40;
   cursor: default;
 }
 
@@ -99,7 +101,13 @@ body::before {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* No opacity/blur — content is simply clipped by parent overflow:hidden */
+  transition: filter var(--tr-s), opacity var(--tr-s);
+}
+/* Blur + dim content when collapsed — lifted when open */
+#bm-panel.bm-collapsed #bm-content {
+  filter: blur(3px);
+  opacity: 0.35;
+  pointer-events: none;   /* collapsed strip shows no interactive targets */
 }
 
 /* ── [2] Pin button ── */
@@ -404,6 +412,25 @@ body::before {
   height: 100%;
   display: flex; flex-direction: column; align-items: center;
   z-index: 1; overflow: hidden;
+}
+
+/*
+ * [3] Future background image layer.
+ * Using position:fixed means it covers the full viewport and is
+ * completely unaffected by #page's width changing as the bookmark
+ * panel opens/closes. Set --page-bg-image in JS when you add the
+ * background-image feature.
+ */
+#page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--page-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 /* ── Clock: top-right ── */

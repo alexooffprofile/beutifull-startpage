@@ -20,9 +20,9 @@
   ══════════════════════════════════════════════════════════════ */
   const CONFIG = {
     /** px from left edge that triggers panel open */
-    HOVER_ZONE_PX: 28,
+    HOVER_ZONE_PX: 56,
     /** ms delay before closing after mouse leaves */
-    CLOSE_DELAY_MS: 300,
+    CLOSE_DELAY_MS: 110,
     /**
      * Panel open width as % of viewport.
      * This is written to --bm-open-w on #bm-panel.
@@ -152,25 +152,16 @@
   const pinBtn = document.createElement('button');
   pinBtn.id = 'bm-pin-btn';
   pinBtn.title = 'Pin panel open (or double-click panel)';
-  pinBtn.innerHTML = svgPin(false);
-  panel.prepend(pinBtn);   // first child → absolute positioned top-right via CSS
-
-  function svgPin(active) {
-    // Pin icon: solid when pinned, outline when not
-    return active
-      ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-           <path d="M16 2v2l-1 1-2 6H8l-2 3h5v8l1 1 1-1v-8h5l-2-3h-3L12 5l-1-1V2h5z"/>
-         </svg>`
-      : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-           <line x1="12" y1="17" x2="12" y2="22"/>
-           <path d="M5 17h14v-2a6 6 0 0 0-4-5.66V4h1V2H8v2h1v5.34A6 6 0 0 0 5 15v2z"/>
-         </svg>`;
-  }
+  // Single icon — active state is handled purely by CSS color change (.bm-pinned)
+  pinBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="17" x2="12" y2="22"/>
+    <path d="M5 17h14v-2a6 6 0 0 0-4-5.66V4h1V2H8v2h1v5.34A6 6 0 0 0 5 15v2z"/>
+  </svg>`;
+  panel.prepend(pinBtn);
 
   function setPin(val) {
     pinned = val;
     panel.classList.toggle('bm-pinned', pinned);
-    pinBtn.innerHTML = svgPin(pinned);
     pinBtn.title = pinned ? 'Unpin panel' : 'Pin panel open (or double-click panel)';
   }
 
