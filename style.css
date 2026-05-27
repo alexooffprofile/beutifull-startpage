@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Beautiful New Tab — style.css  v5
+   Beautiful New Tab — style.css
    ═══════════════════════════════════════════════════════════════ */
 
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
@@ -22,22 +22,21 @@
   --tr:          0.42s cubic-bezier(0.34,1.46,0.64,1);
   --tr-s:        0.28s cubic-bezier(0.4,0,0.2,1);
 
-  /* ── BOOKMARKS PANEL widths ─────────────────────────────────
-     --bm-open-w : panel width when open  (also set by JS CONFIG.PANEL_WIDTH_PCT)
-     --bm-col-w  : visible strip when collapsed
-     Change either here or in bookmarks.js CONFIG.PANEL_WIDTH_PCT
-  ──────────────────────────────────────────────────────────── */
+  /* ── Bookmarks panel widths ────────────────────────────────────
+     --bm-open-w  : ширина открытой панели (перезаписывается из JS)
+     --bm-col-w   : ширина свёрнутой полоски
+     Менять здесь ИЛИ в bookmarks.js → CONFIG.PANEL_WIDTH_PCT     */
   --bm-open-w: 32vw;
-  --bm-col-w:  40px;
+  --bm-col-w:  44px;
 }
 
-/* ─── Base layout ────────────────────────────────────────────── */
+/* ─── Base layout ─────────────────────────────────────────────── */
 html, body {
   width:100%; height:100%;
   background:var(--bg); color:var(--text);
   font-family:'DM Sans',sans-serif; font-weight:300;
   overflow:hidden;
-  display:flex;   /* [3] side-by-side: #bm-panel | #page */
+  display:flex;
 }
 body::before {
   content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
@@ -47,17 +46,15 @@ body::before {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   [3] BOOKMARKS PANEL — geometric clip model
-   ─────────────────────────────────────────────────────────────
-   • #bm-panel width animates between --bm-col-w and --bm-open-w.
-   • #bm-content is always rendered at --bm-open-w internally.
-     The panel's overflow:hidden clips it when collapsed.
-   • This pushes #page right — no overlay, no dim.
+   BOOKMARKS PANEL
+   Geometric clip: panel width animates, #bm-content stays full-
+   width internally and is clipped by overflow:hidden on panel.
+   Opening pushes #page right — background on #page::before is
+   position:fixed so it never distorts (point 3).
    ═══════════════════════════════════════════════════════════════ */
 #bm-panel {
   position: relative;
   height: 100%;
-  /* collapsed default: thin strip */
   width: var(--bm-col-w);
   min-width: var(--bm-col-w);
   flex-shrink: 0;
@@ -66,34 +63,32 @@ body::before {
   display: flex;
   flex-direction: column;
   z-index: 50;
-  overflow: hidden;           /* clips content when collapsed */
+  overflow: hidden;
   transition: width var(--tr-s), box-shadow var(--tr-s), border-color var(--tr-s);
 }
-
-/* Open state — driven by removing .bm-collapsed */
 #bm-panel:not(.bm-collapsed) {
   width: var(--bm-open-w);
   box-shadow: 4px 0 40px rgba(0,0,0,.45);
 }
-
-/* [2] Pinned — accent left border as visual indicator */
 #bm-panel.bm-pinned {
   border-left: 2px solid var(--accent);
 }
 
-/* Hover zone injected by JS flush to left edge.
-   z-index: 40 — below panel (z-index:50) so it never blocks
-   clicks on links/buttons inside the open panel. */
+/* ── Hover zone ─────────────────────────────────────────────────
+   z-index: 40 — strictly BELOW panel (z-index:50).
+   This means the zone never captures mouse events when the panel
+   is open: all clicks reach panel content normally.
+   Width is set via inline style from CONFIG.HOVER_ZONE_PX in JS. */
 #bm-hover-zone {
   position: fixed;
   top: 0; left: 0;
-  width: 250px;    /* keep in sync with CONFIG.HOVER_ZONE_PX — wider trigger */
   height: 100%;
-  z-index: 40;
+  z-index: 40;          /* below panel, above main page */
   cursor: default;
+  pointer-events: auto;
 }
 
-/* ── [3] Content — always full internal width ── */
+/* ── Content wrapper ── always full internal width ── */
 #bm-content {
   width: var(--bm-open-w);
   min-width: var(--bm-open-w);
@@ -101,24 +96,33 @@ body::before {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Blur + dim the strip that peeks out when collapsed */
   transition: filter var(--tr-s), opacity var(--tr-s);
 }
-/* Blur + dim content when collapsed — lifted when open */
 #bm-panel.bm-collapsed #bm-content {
   filter: blur(3px);
-  opacity: 0.35;
-  pointer-events: none;   /* collapsed strip shows no interactive targets */
+  opacity: 0.32;
+  pointer-events: none;
 }
 
-/* ── [2] Pin button ── */
+/* ── Header row (pin button lives here, not on panel root) ──────
+   [3] Because #bm-content is clipped when collapsed, bm-header
+   and everything in it is automatically hidden — no need for
+   extra visibility rules.                                        */
+#bm-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 8px 2px;
+  flex-shrink: 0;
+}
+
+/* ── Pin button ── only color changes, icon stays the same ── */
 #bm-pin-btn {
-  position: absolute;
-  top: 8px; right: 8px;
-  z-index: 10;
   background: none;
   border: 1px solid transparent;
   border-radius: 6px;
-  width: 24px; height: 24px;
+  width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   color: var(--text-muted);
@@ -129,9 +133,10 @@ body::before {
   background: rgba(123,147,255,.1);
   border-color: var(--border-focus);
 }
-#bm-panel.bm-pinned #bm-pin-btn {
+/* Active state: accent color only, icon unchanged */
+#bm-pin-btn.active {
   color: var(--accent);
-  background: rgba(123,147,255,.12);
+  background: rgba(123,147,255,.14);
   border-color: var(--accent);
 }
 
@@ -140,13 +145,12 @@ body::before {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  padding: 10px 36px 8px 10px;   /* right padding leaves room for pin btn */
+  padding: 4px 10px 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  min-height: 44px;
+  min-height: 38px;
 }
 
-/* Base tag */
 .bm-tag {
   background: none;
   border: 1px solid var(--border);
@@ -163,7 +167,6 @@ body::before {
 .bm-tag:hover { border-color: var(--border-focus); color: var(--text); }
 .bm-tag.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* Colored tags (site + custom) */
 .bm-tag-colored {
   border-color: var(--tag-color, var(--accent));
   color: var(--tag-color, var(--accent));
@@ -173,8 +176,6 @@ body::before {
   background: var(--tag-color, var(--accent));
   color: #fff;
 }
-
-/* "+" add-tag btn */
 .bm-tag-add {
   padding: 3px 8px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -198,7 +199,6 @@ body::before {
 #bm-add-url:focus, #bm-add-title:focus { border-color: var(--border-focus); }
 #bm-add-url::placeholder, #bm-add-title::placeholder { color: var(--text-muted); }
 #bm-add-title { flex: 0.65; }
-
 #bm-add-btn {
   flex-shrink: 0; width: 26px; height: 26px;
   background: var(--accent); border: none; border-radius: 7px;
@@ -232,7 +232,7 @@ body::before {
   position: relative; border-radius: 14px; overflow: hidden;
   border: 1px solid var(--border); cursor: pointer;
   transition: border-color var(--tr-s), box-shadow var(--tr-s);
-  min-height: 110px; display: flex; flex-direction: column;
+  display: flex; flex-direction: column;
   background: var(--surface2);
 }
 .bm-card:hover { border-color: var(--border-focus); box-shadow: 0 8px 32px rgba(0,0,0,.4); }
@@ -249,9 +249,7 @@ body::before {
   background: linear-gradient(to bottom,rgba(14,15,19,.55) 0%,rgba(14,15,19,.82) 60%,rgba(14,15,19,.97) 100%);
 }
 
-.bm-card-content {
-  position: relative; z-index: 1; padding: 10px 12px 8px; flex-shrink: 0;
-}
+.bm-card-content { position: relative; z-index: 1; padding: 10px 12px 8px; flex-shrink: 0; }
 
 .bm-card-site { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .bm-card-favicon { width: 14px; height: 14px; border-radius: 3px; object-fit: contain; flex-shrink: 0; opacity: .8; }
@@ -264,10 +262,7 @@ body::before {
 }
 
 .bm-card-url-row { display: flex; align-items: center; gap: 5px; }
-.bm-card-url {
-  font-size: .7rem; color: var(--text-muted);
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+.bm-card-url { font-size: .7rem; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bm-card-copy {
   flex-shrink: 0; background: none; border: none; cursor: pointer;
   color: var(--text-muted); line-height: 0; padding: 3px; border-radius: 5px;
@@ -301,41 +296,78 @@ body::before {
 .bm-item-favicon { width:13px;height:13px;border-radius:3px;object-fit:contain;flex-shrink:0;opacity:.7; }
 .bm-item-title   { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 
-/* [4] Tag-assign button on each row */
 .bm-item-tag-btn {
-  flex-shrink: 0;
-  background: none; border: none;
-  color: var(--text-muted);
-  opacity: 0;
+  flex-shrink: 0; background: none; border: none;
+  color: var(--text-muted); opacity: 0;
   cursor: pointer; line-height: 0; padding: 2px; border-radius: 4px;
   transition: opacity var(--tr-s), color var(--tr-s), background var(--tr-s);
 }
 .bm-item-tag-btn:hover { color: var(--accent2); background: rgba(255,126,179,.1); }
 
 .bm-item-del {
-  flex-shrink: 0;
-  background: none; border: none; color: var(--text-muted);
-  opacity: 0; cursor: pointer; line-height: 0; padding: 2px; border-radius: 4px;
+  flex-shrink: 0; background: none; border: none;
+  color: var(--text-muted); opacity: 0;
+  cursor: pointer; line-height: 0; padding: 2px; border-radius: 4px;
   transition: opacity var(--tr-s), color var(--tr-s), background var(--tr-s);
 }
 .bm-item-del:hover { color: var(--accent2); background: rgba(255,126,179,.1); }
 
-/* ── [4] Tag-assign popup ── */
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL TAG-ASSIGN POPUP
+   Appended to <body> so it's never clipped by the panel.
+   position:fixed + high z-index ensure it's above everything.
+   ═══════════════════════════════════════════════════════════════ */
 #bm-tag-assign-popup {
-  position: absolute;
-  z-index: 110;
+  position: fixed;          /* [2] global: not clipped by panel overflow */
+  z-index: 9000;            /* above everything */
   background: var(--surface2);
   border: 1px solid var(--border-focus);
   border-radius: 12px;
-  padding: 6px;
-  min-width: 140px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.5);
-  animation: fadeIn .15s ease both;
+  min-width: 200px;
+  max-width: 260px;
+  max-height: 340px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,.6);
+  animation: tapFadeIn .15s ease both;
+  overflow: hidden;
 }
-@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+@keyframes tapFadeIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+
+/* Search row inside popup */
+.bm-tap-search-wrap {
+  padding: 8px 8px 4px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.bm-tap-search {
+  width: 100%;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 9px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: .78rem;
+  outline: none;
+  transition: border-color var(--tr-s);
+}
+.bm-tap-search:focus { border-color: var(--border-focus); }
+.bm-tap-search::placeholder { color: var(--text-muted); }
+
+/* Scrollable items list */
+.bm-tap-items {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface3) transparent;
+}
+.bm-tap-items::-webkit-scrollbar { width: 3px; }
+.bm-tap-items::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
 
 .bm-tap-empty {
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-size: .76rem;
   color: var(--text-muted);
   line-height: 1.5;
@@ -361,7 +393,7 @@ body::before {
 .bm-tap-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ═══════════════════════════════════════════════════════════════
-   TAG MODAL & COLOR PICKER
+   TAG MODAL & COLOR PICKER (slide up from bottom of panel)
    ═══════════════════════════════════════════════════════════════ */
 #bm-tag-modal,
 #bm-color-picker-popup {
@@ -408,18 +440,17 @@ body::before {
 #page {
   position: relative;
   flex: 1;
-  min-width: 0;           /* [3] allows page to shrink when panel opens */
+  min-width: 0;
   height: 100%;
   display: flex; flex-direction: column; align-items: center;
   z-index: 1; overflow: hidden;
 }
 
 /*
- * [3] Future background image layer.
- * Using position:fixed means it covers the full viewport and is
- * completely unaffected by #page's width changing as the bookmark
- * panel opens/closes. Set --page-bg-image in JS when you add the
- * background-image feature.
+ * [3] Future background image hook.
+ * position:fixed means it covers the full viewport and is NOT
+ * affected by #page narrowing when the bookmarks panel opens.
+ * To activate: document.documentElement.style.setProperty('--page-bg-image','url(...)');
  */
 #page::before {
   content: '';
@@ -447,7 +478,6 @@ body::before {
 #date { font-size:.72rem;color:var(--text-muted);letter-spacing:.12em;text-transform:uppercase;margin-top:.3rem; }
 body.focused #clock-wrap { opacity:.3; transform:translateY(-4px); }
 
-/* ── Engine icon ── */
 #eng-icon { display:flex;align-items:center;justify-content:center;width:16px; }
 #eng-icon i { font-size:14px; }
 
@@ -571,7 +601,7 @@ body.focused #shortcuts { opacity:0;pointer-events:none; }
 .shortcut:hover .shortcut-icon { border-color:var(--border-focus);box-shadow:0 4px 20px rgba(0,0,0,.3); }
 
 /* ═══════════════════════════════════════════════════════════════
-   FLOATING POPUPS
+   FLOATING POPUPS (calc, monrate, etc.)
    ═══════════════════════════════════════════════════════════════ */
 .fp { position:fixed;z-index:200;background:var(--surface);border:1.5px solid var(--border-focus);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.04);min-width:280px;min-height:140px;display:flex;flex-direction:column;resize:both;overflow:hidden;animation:fpIn .32s cubic-bezier(0.34,1.4,0.64,1) both; }
 @keyframes fpIn { from{opacity:0;transform:scale(.92) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
