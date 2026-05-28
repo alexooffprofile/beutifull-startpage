@@ -16,11 +16,11 @@
     /* ── Hover-триггер ─────────────────────────────────────────
        HOVER_ZONE_PX   : ширина невидимой зоны у левого края (px),
                          попадание курсора в неё открывает панель   */
-    HOVER_ZONE_PX   : 60,
+    HOVER_ZONE_PX   : 260,
 
     /* ── Задержка закрытия ──────────────────────────────────────
        CLOSE_DELAY_MS  : мс до схлопывания после ухода курсора      */
-    CLOSE_DELAY_MS  : 320,
+    CLOSE_DELAY_MS  : 110,
 
     /* ── Карточки закладок ──────────────────────────────────────
        CARD_MIN_HEIGHT : минимальная высота карточки группы (px)    */
@@ -96,6 +96,7 @@
   let activeTag  = 'all';
   let closeTimer = null;
   let pinned     = false;
+  let autoPinned = false;   /* закреплено автоматически — снимается после действия */
 
   /* ─── DOM refs ────────────────────────────────────────────── */
   const panel      = document.getElementById('bm-panel');
@@ -118,6 +119,52 @@
   const bmHeader = document.createElement('div');
   bmHeader.id = 'bm-header';
 
+  /* ── Search field ─────────────────────────────────────────────── */
+  let searchQuery = '';
+
+  const searchWrap = document.createElement('div');
+  searchWrap.id = 'bm-search-wrap';
+
+  const searchIco = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  searchIco.setAttribute('id','bm-search-ico');
+  searchIco.setAttribute('viewBox','0 0 24 24');
+  searchIco.setAttribute('fill','none');
+  searchIco.setAttribute('stroke','currentColor');
+  searchIco.setAttribute('stroke-width','2');
+  searchIco.setAttribute('stroke-linecap','round');
+  searchIco.setAttribute('stroke-linejoin','round');
+  searchIco.innerHTML = '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="15.65" y2="15.65"/>';
+
+  const searchIn = document.createElement('input');
+  searchIn.id = 'bm-search';
+  searchIn.type = 'text';
+  searchIn.placeholder = 'Search bookmarks…';
+  searchIn.autocomplete = 'off';
+  searchIn.spellcheck = false;
+
+  const searchClear = document.createElement('button');
+  searchClear.id = 'bm-search-clear';
+  searchClear.title = 'Clear search';
+  searchClear.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="2.5" stroke-linecap="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>`;
+
+  searchIn.addEventListener('input', () => {
+    searchQuery = searchIn.value.trim().toLowerCase();
+    searchClear.classList.toggle('visible', searchQuery.length > 0);
+    renderList();
+  });
+  searchIn.addEventListener('keydown', e => { if (e.key === 'Escape') { searchIn.value = ''; searchQuery = ''; searchClear.classList.remove('visible'); renderList(); } });
+  searchClear.addEventListener('click', () => { searchIn.value = ''; searchQuery = ''; searchClear.classList.remove('visible'); searchIn.focus(); renderList(); });
+
+  /* Auto-pin: строка поиска */
+  searchIn.addEventListener('focus', engagePanel);
+  searchIn.addEventListener('blur',  () => { if(!searchQuery) releasePanel(); });
+
+  searchWrap.append(searchIco, searchIn, searchClear);
+  bmHeader.appendChild(searchWrap);
+
   const pinBtn = document.createElement('button');
   pinBtn.id = 'bm-pin-btn';
   pinBtn.title = 'Pin panel (or double-click panel)';
@@ -138,8 +185,22 @@
     pinBtn.classList.toggle('active', pinned);
     pinBtn.title = pinned ? 'Unpin panel' : 'Pin panel (or double-click panel)';
   }
-  pinBtn.addEventListener('click', e => { e.stopPropagation(); setPin(!pinned); });
-  panel.addEventListener('dblclick', e => { if(e.target.closest('#bm-pin-btn')) return; setPin(!pinned); });
+  pinBtn.addEventListener('click', e => { e.stopPropagation(); setPin(!pinned); if(pinned) autoPinned=false; });
+  panel.addEventListener('dblclick', e => { if(e.target.closest('#bm-pin-btn')) return; setPin(!pinned); if(pinned) autoPinned=false; });
+
+  /* ─── Auto-pin: закрепляет панель на время действия ──────────
+     engagePanel() — вызывается при любом "требующем внимания" действии:
+       • фокус в полях добавления закладки / поиска
+       • открытие попапа назначения тегов / модала создания тега
+     releasePanel() — вызывается по завершении (blur, закрытие попапа):
+       снимает auto-pin только если пользователь не закрепил вручную.  */
+  function engagePanel() {
+    openPanel();
+    if (!pinned) { autoPinned = true; setPin(true); }
+  }
+  function releasePanel() {
+    if (autoPinned) { autoPinned = false; setPin(false); scheduleClose(); }
+  }
 
   /* ─── Panel open / close ──────────────────────────────────── */
   function openPanel()  { clearTimeout(closeTimer); panel.classList.remove('bm-collapsed'); }
@@ -180,6 +241,12 @@
   addBtn.addEventListener('click', addBookmark);
   addUrlIn.addEventListener('keydown',   e => { if(e.key==='Enter') addTitleIn.value===''?addBookmark():addTitleIn.focus(); });
   addTitleIn.addEventListener('keydown', e => { if(e.key==='Enter') addBookmark(); });
+
+  /* Auto-pin: поля добавления закладки */
+  addUrlIn.addEventListener('focus',   engagePanel);
+  addTitleIn.addEventListener('focus',  engagePanel);
+  addUrlIn.addEventListener('blur',    () => { if(!addTitleIn.matches(':focus')) releasePanel(); });
+  addTitleIn.addEventListener('blur',  () => { if(!addUrlIn.matches(':focus'))  releasePanel(); });
 
   /* ─── Delete / tag CRUD ───────────────────────────────────── */
   const deleteBookmark = id => { bookmarks=bookmarks.filter(b=>b.id!==id); saveBookmarks(bookmarks); render(); };
@@ -274,11 +341,15 @@
     /* Focus search for keyboard use */
     searchInput.focus();
 
+    /* Auto-pin while popup is open */
+    engagePanel();
+
     /* Close on outside click */
     setTimeout(() => {
       document.addEventListener('mousedown', function closer(e) {
         if (!pop.contains(e.target) && e.target !== anchorEl) {
           pop.remove(); document.removeEventListener('mousedown', closer);
+          releasePanel();
         }
       });
     }, 0);
@@ -343,11 +414,12 @@
     </div>`;
     panel.appendChild(modal);
     modal.querySelector('#bm-tag-name').focus();
-    modal.querySelector('#bm-tag-cancel').onclick=()=>modal.remove();
+    engagePanel();
+    modal.querySelector('#bm-tag-cancel').onclick=()=>{ modal.remove(); releasePanel(); };
     modal.querySelector('#bm-tag-confirm').onclick=()=>{
       const name=modal.querySelector('#bm-tag-name').value.trim();
       const color=modal.querySelector('#bm-tag-color').value;
-      if(name){addCustomTag(name,color);render();} modal.remove();
+      if(name){addCustomTag(name,color);render();} modal.remove(); releasePanel();
     };
     modal.querySelector('#bm-tag-name').addEventListener('keydown',e=>{
       if(e.key==='Enter') modal.querySelector('#bm-tag-confirm').click();
@@ -364,9 +436,10 @@
       <div class="bm-modal-btns"><button id="bm-cp-del" class="danger">Delete tag</button><button id="bm-cp-ok" class="primary">Save</button></div>
     </div>`;
     panel.appendChild(pop);
-    pop.querySelector('#bm-cp-ok').onclick=()=>{updateTagColor(tagId,pop.querySelector('#bm-cp-color').value);pop.remove();};
-    pop.querySelector('#bm-cp-del').onclick=()=>{deleteCustomTag(tagId);pop.remove();};
-    document.addEventListener('mousedown',function close(e){if(!pop.contains(e.target)&&e.target!==anchorEl){pop.remove();document.removeEventListener('mousedown',close);}});
+    engagePanel();
+    pop.querySelector('#bm-cp-ok').onclick=()=>{updateTagColor(tagId,pop.querySelector('#bm-cp-color').value);pop.remove();releasePanel();};
+    pop.querySelector('#bm-cp-del').onclick=()=>{deleteCustomTag(tagId);pop.remove();releasePanel();};
+    document.addEventListener('mousedown',function close(e){if(!pop.contains(e.target)&&e.target!==anchorEl){pop.remove();document.removeEventListener('mousedown',close);releasePanel();}});
   }
 
   /* ─── List render ─────────────────────────────────────────── */
@@ -378,7 +451,18 @@
       const isSite=bookmarks.some(b=>b.host===activeTag);
       visible=isSite?bookmarks.filter(b=>b.host===activeTag):bookmarks.filter(b=>b.customTags.includes(activeTag));
     }
-    if(!visible.length){ const e=document.createElement('div'); e.className='bm-empty'; e.textContent='No bookmarks here yet.'; list.appendChild(e); return; }
+    if(searchQuery){
+      visible=visible.filter(b=>
+        b.title.toLowerCase().includes(searchQuery) ||
+        b.url.toLowerCase().includes(searchQuery)   ||
+        b.host.toLowerCase().includes(searchQuery)
+      );
+    }
+    if(!visible.length){
+      const e=document.createElement('div'); e.className='bm-empty';
+      e.textContent=searchQuery?'No bookmarks match your search.':'No bookmarks here yet.';
+      list.appendChild(e); return;
+    }
     const groups=new Map();
     for(const b of visible){ if(!groups.has(b.host))groups.set(b.host,[]); groups.get(b.host).push(b); }
     groups.forEach((items,host)=>list.appendChild(buildGroupCard(host,items)));
