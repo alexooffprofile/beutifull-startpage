@@ -199,7 +199,13 @@
     if (!pinned) { autoPinned = true; setPin(true); }
   }
   function releasePanel() {
-    if (autoPinned) { autoPinned = false; setPin(false); scheduleClose(); }
+    if (!autoPinned) return;
+    autoPinned = false;
+    setPin(false);
+    /* Не сворачивать если мышь всё ещё над панелью или hover-зоной */
+    if (!panel.matches(':hover') && !document.getElementById('bm-hover-zone')?.matches(':hover')) {
+      scheduleClose();
+    }
   }
 
   /* ─── Panel open / close ──────────────────────────────────── */
@@ -236,7 +242,11 @@
     bookmarks.push({ id:uid(), url, title:addTitleIn.value.trim()||siteLabel(host), host, customTags:[], image:'' });
     saveBookmarks(bookmarks);
     addUrlIn.value = addTitleIn.value = '';
-    addUrlIn.focus(); render();
+    /* Блюрим оба поля — blur-listener сам вызовет releasePanel.
+       НЕ делаем focus() обратно — это бы снова триггерило engagePanel. */
+    addUrlIn.blur();
+    addTitleIn.blur();
+    render();
   }
   addBtn.addEventListener('click', addBookmark);
   addUrlIn.addEventListener('keydown',   e => { if(e.key==='Enter') addTitleIn.value===''?addBookmark():addTitleIn.focus(); });

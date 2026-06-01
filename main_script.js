@@ -107,12 +107,15 @@ document.addEventListener('keydown', function(e){
 
 document.addEventListener('keydown',e=>{
   if(e.key==='Control'){
-      if(activeSide!=='search' && activeSide!=='cmd')
-      { 
-        qEl.focus(); 
-        setSide('search');
-      }
+    /* Не перехватывать Ctrl если фокус в любом поле ввода —
+       иначе Ctrl+A / Ctrl+C / Ctrl+V ломаются в полях закладок */
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if(activeSide!=='search' && activeSide!=='cmd'){
+      qEl.focus();
+      setSide('search');
     }
+  }
 });
 
 document.addEventListener('mousedown', e => {

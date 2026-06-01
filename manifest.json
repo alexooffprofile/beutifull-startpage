@@ -1,9 +1,9 @@
 {
     "manifest_version": 2,
     "name": "Beutifull Starteds Page",
-    "version": "1.0.1.12",
-    "author": "tAllternative",
-    "description": "Super duper, have more tools home-new-start page.",
+    "version": "1.0.3.0",
+    "author": "alexooffprofile",
+    "description": "Super duper, have more tools home-new-start page.\n\nGitHub: github.com/alexooffprofile/beutifull-startpage",
     "applications": {
         "gecko": {
             "id": "beutifull-startedspage@baseminimumutils"
