@@ -1,28 +1,59 @@
 {
-    "manifest_version": 2,
-    "name": "Beutifull Starteds Page",
-    "version": "1.0.3.0",
-    "author": "alexooffprofile",
-    "description": "Super duper, have more tools home-new-start page.\n\nGitHub: github.com/alexooffprofile/beutifull-startpage",
-    "applications": {
-        "gecko": {
-            "id": "beutifull-startedspage@baseminimumutils"
-        }
-    },
-    "chrome_url_overrides": {
-        "newtab": "newtab.html"
-    },
-    "chrome_settings_overrides": {
-        "homepage": "newtab.html"
-    },
-    "permissions": [
-        "storage",
-        "tabs",
-        "https://suggestqueries.google.com/*",
-        "https://api.frankfurter.app/*"
-    ],
-    "icons": {
-        "48": "icons/48.png",
-        "96": "icons/96.png"
+  "manifest_version": 2,
+  "name": "Beutifull Starteds Page",
+  "version": "1.1.0.0",
+  "author": "alexooffprofile",
+  "description": "Super duper, have more tools home-new-start page.\n\nGitHub: github.com/alexooffprofile/beutifull-startpage",
+
+  "applications": {
+    "gecko": {
+      "id": "beutifull-startedspage@baseminimumutils",
+      "strict_min_version": "109.0"
     }
+  },
+
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "chrome_settings_overrides": {
+    "homepage": "newtab.html"
+  },
+
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js":  ["content/bookmark-prompt.js"],
+      "css": ["content/bookmark-prompt.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/48.png",
+      "96": "icons/96.png"
+    },
+    "default_title": "Beautiful New Tab"
+  },
+
+  "permissions": [
+    "storage",
+    "tabs",
+    "bookmarks",
+    "<all_urls>",
+    "https://suggestqueries.google.com/*",
+    "https://api.frankfurter.app/*",
+    "https://open.er-api.com/*"
+  ],
+
+  "icons": {
+    "48": "icons/48.png",
+    "96": "icons/96.png"
+  }
 }

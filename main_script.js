@@ -24,8 +24,8 @@ const COMMANDS = {
   'notion': { type:'url', url:'https://notion.so',              label:'Notion',       icon:'📝', desc:'notion.so'             },
 
   /* Widgets */
-  'calc':    { type:'widget', widget:'calc',    label:'Calculator', icon:'🧮', desc:'Calculator'   },
-  'monrate': { type:'widget', widget:'monrate', label:'Currency Rates', icon:'💱', desc:'USD · UAH · RUB · EUR …'  },
+  'calc':    { type:'widget', widget:'calc',    label:'Calculator',     icon:'🧮', desc:'Calculator'              },
+  'monrate': { type:'widget', widget:'monrate', label:'Currency Rates', icon:'💱', desc:'USD · UAH · RUB · EUR …' },
 };
 
 
@@ -50,16 +50,13 @@ const engines=[
 ];
 let engIdx=0;
 
-/* FIX 3: engine toggle must not blur the search input */
 document.getElementById('engine-btn').addEventListener('mousedown', e=>{
-  // prevent button from stealing focus
   e.preventDefault();
 });
 document.getElementById('engine-btn').addEventListener('click', ()=>{
   engIdx=(engIdx+1)%engines.length;
   document.getElementById('eng-icon').innerHTML = engines[engIdx].icon;
   document.getElementById('eng-label').textContent = engines[engIdx].label;
-  // FIX 3: only focus if we were already in search context
   if(activeSide==='search' || activeSide===null){
     qEl.focus();
   }
@@ -69,7 +66,6 @@ document.getElementById('engine-btn').addEventListener('click', ()=>{
 /* ══ FOCUS / SIDE STATE ══ */
 const body=document.body;
 
-// activeSide: null | 'search' | 'cmd'
 let activeSide=null;
 
 function setSide(side){
@@ -80,35 +76,18 @@ function setSide(side){
 }
 
 document.addEventListener('keydown', function(e){
-
   if (e.key !== 'Tab' || (e.key !== 'Tab' && !e.shiftKey))
       return;
-
-  // Если наша палитра/поиск активны —
-  // полностью забираем Tab себе
-  if(
-      activeSide === 'search' ||
-      activeSide === 'cmd'
-  ){
+  if(activeSide === 'search' || activeSide === 'cmd'){
       e.preventDefault();
       e.stopPropagation();
-
-      if(activeSide === 'search'){
-          setSide('cmd');
-          cmdEl.focus();
-      }
-      else{
-          setSide('search');
-          qEl.focus();
-      }
+      if(activeSide === 'search'){ setSide('cmd'); cmdEl.focus(); }
+      else                       { setSide('search'); qEl.focus(); }
   }
-
 }, true);
 
 document.addEventListener('keydown',e=>{
   if(e.key==='Control'){
-    /* Не перехватывать Ctrl если фокус в любом поле ввода —
-       иначе Ctrl+A / Ctrl+C / Ctrl+V ломаются в полях закладок */
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if(activeSide!=='search' && activeSide!=='cmd'){
@@ -121,11 +100,9 @@ document.addEventListener('keydown',e=>{
 document.addEventListener('mousedown', e => {
   const sw = document.getElementById('search-wrap');
   const isFP = e.target.closest('.fp');
-
   const inSearch = e.target.closest('#search-side');
   const inCmd = e.target.closest('#cmd-side');
 
-  // ❌ Клик вне всего → закрыть
   if (!sw.contains(e.target) && !isFP) {
     setSide(null);
     closeDropdown();
@@ -133,16 +110,12 @@ document.addEventListener('mousedown', e => {
     cmdEl.blur();
     return;
   }
-
-  // ✅ Клик внутри search-side → всегда фокус на search
   if (inSearch && e.target !== qEl) {
     e.preventDefault();
     qEl.focus();
     setSide('search');
     return;
   }
-
-  // ✅ Клик внутри cmd-side → всегда фокус на cmd
   if (inCmd && e.target !== cmdEl) {
     e.preventDefault();
     cmdEl.focus();
@@ -151,44 +124,34 @@ document.addEventListener('mousedown', e => {
   }
 });
 
-/* FIX 4 (auto-focus): any printable key while nothing focused → focus search */
 document.addEventListener('keydown', e=>{
   if(e.key==='Con'||e.key==='Alt'||e.key==='Meta'||e.key==='Shift') return;
   if(e.ctrlKey||e.altKey||e.metaKey) return;
-  if(e.key.length!==1) return;  // only printable characters
+  if(e.key.length!==1) return;
   const tag=document.activeElement?.tagName;
   if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return;
-  /* focus the search input — the browser will deliver this keydown's
-     resulting character to it because focus happens synchronously */
   qEl.focus();
 });
 
 
 /* ══════════════════════════════════════════════
-   SHARED DROPDOWN (FIX 2)
-   - One panel, full width, no split columns
-   - max-height ONLY grows, never shrinks while bar is focused
-   - Populated by either search suggestions OR cmd results
+   SHARED DROPDOWN
 ══════════════════════════════════════════════ */
 const dropdown=document.getElementById('dropdown');
-let ddLockedHeight=0;  // px — the highest it's been this session
+let ddLockedHeight=0;
 
 function openDropdown(html){
   dropdown.innerHTML=html;
   dropdown.classList.add('open');
   document.body.classList.add('dropdown-open');
-  // measure content, lock height so it can't shrink
   requestAnimationFrame(()=>{
     const h=dropdown.scrollHeight;
-    if(h>ddLockedHeight){
-      ddLockedHeight=h;
-    }
+    if(h>ddLockedHeight){ ddLockedHeight=h; }
     dropdown.style.minHeight=ddLockedHeight+'px';
   });
 }
 
 function closeDropdown(){
-  // Reset lock when bar loses focus entirely
   ddLockedHeight=0;
   dropdown.style.minHeight='0';
   dropdown.classList.remove('open');
@@ -196,7 +159,6 @@ function closeDropdown(){
   document.body.classList.remove('dropdown-open');
 }
 
-// Call this when new content is set but dropdown stays open
 function refreshDropdownHeight(){
   requestAnimationFrame(()=>{
     const h=dropdown.scrollHeight;
@@ -215,7 +177,6 @@ let suggs=[], suggActive=-1, fetchTimer=null;
 
 qEl.addEventListener('focus', ()=>{
   setSide('search');
-  // if cmd was showing its list, clear it and show empty search state
   if(dropdown.querySelector('.cmd-item')){ closeDropdown(); ddLockedHeight=0; }
 });
 
@@ -230,7 +191,6 @@ qEl.addEventListener('blur', ()=>{
 clearBtn.addEventListener('mousedown', e=>e.preventDefault());
 clearBtn.addEventListener('click', ()=>{
   qEl.value=''; clearBtn.classList.remove('visible');
-  // FIX 2: don't collapse dropdown, just clear it
   suggs=[]; suggActive=-1;
   closeDropdown(); ddLockedHeight=0;
   qEl.focus();
@@ -241,7 +201,7 @@ qEl.addEventListener('input', ()=>{
   clearBtn.classList.toggle('visible', v.length>0);
   suggActive=-1;
   clearTimeout(fetchTimer);
-  if(!v){ /* keep dropdown open at locked size but empty */ closeDropdown(); ddLockedHeight=0; return; }
+  if(!v){ closeDropdown(); ddLockedHeight=0; return; }
   fetchTimer=setTimeout(()=>fetchSugg(v), 200);
 });
 
@@ -259,11 +219,11 @@ async function fetchSugg(q){
     const d=await r.json();
     suggs=d[1]||[];
     renderSugg();
-  }catch{ /* silently fail */ }
+  }catch{}
 }
 
 function renderSugg(){
-  if(!suggs.length) return; // FIX 2: don't collapse if no results, just leave current height
+  if(!suggs.length) return;
   const html=suggs.slice(0,8).map((s,i)=>`
     <div class="sugg-item" data-i="${i}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -296,7 +256,7 @@ let cmdMatches=[], cmdActive=-1;
 
 cmdEl.addEventListener('focus', ()=>{
   setSide('cmd');
-  ddLockedHeight=0; // reset so cmd list can size itself fresh
+  ddLockedHeight=0;
   if(!cmdEl.value.trim()) showAllCmds();
 });
 
@@ -328,7 +288,6 @@ function showAllCmds(){
   const urls=Object.entries(COMMANDS).filter(([,c])=>c.type==='url');
   const widgets=Object.entries(COMMANDS).filter(([,c])=>c.type==='widget');
   cmdMatches=[...widgets,...urls];
-
   let html='';
   if(widgets.length){
     html+=`<div class="cmd-section-header">Widgets</div>`;
@@ -399,7 +358,6 @@ function nextZ(){ return ++_z; }
 
 function openFloatingWidget(name){
   if(openWidgets[name]){ openWidgets[name].style.zIndex=nextZ(); return; }
-
   const fp=document.createElement('div');
   fp.className='fp';
   const count=Object.keys(openWidgets).length;
@@ -407,22 +365,18 @@ function openFloatingWidget(name){
   const x=Math.round((window.innerWidth-W)/2)+count*30;
   const y=Math.round((window.innerHeight-H)/2)+count*30;
   fp.style.cssText=`left:${x}px;top:${y}px;width:${W}px;height:${H}px;z-index:${nextZ()}`;
-
   const header=document.createElement('div'); header.className='fp-header';
   const dot=document.createElement('div');    dot.className='fp-dot fp-close-dot';
   dot.addEventListener('click',()=>closeFloating(name));
   const title=document.createElement('span'); title.className='fp-title';
   title.textContent=COMMANDS[name]?.label||name;
   header.appendChild(dot); header.appendChild(title);
-
   const fpBody=document.createElement('div'); fpBody.className='fp-body';
   if(name==='calc')    fpBody.appendChild(buildCalc());
   if(name==='monrate') fpBody.appendChild(buildMonrate());
-
   fp.appendChild(header); fp.appendChild(fpBody);
   document.body.appendChild(fp);
   openWidgets[name]=fp;
-
   fp.addEventListener('mousedown',()=>fp.style.zIndex=nextZ());
   makeDraggable(fp,header);
 }
@@ -504,28 +458,32 @@ let globalRateCache={};
 let rateFrom='USD', rateTo='UAH';
 
 async function ensureRates(){
-  try{
-    const raw=localStorage.getItem('hp_rates');
-    if(raw){
-      const cached=JSON.parse(raw);
-      const today=new Date().toISOString().slice(0,10);
-      if(cached.date===today && cached.rates && Object.keys(cached.rates).length>10){
-        globalRateCache=cached; return {ok:true,fromCache:true};
+  /* ── Try cache from BNT_STORAGE first ── */
+  const S = window.BNT_STORAGE;
+  if (S) {
+    const cached = S.getRates();
+    if (cached) {
+      const today = new Date().toISOString().slice(0,10);
+      if (cached.date === today && cached.rates && Object.keys(cached.rates).length > 10) {
+        globalRateCache = cached;
+        return { ok:true, fromCache:true };
       }
     }
-  }catch{}
-  // Primary: open.er-api.com (free, no key, has UAH + RUB)
+  }
+
+  /* ── Primary: open.er-api.com ── */
   try{
     const r=await fetch('https://open.er-api.com/v6/latest/USD');
     const d=await r.json();
     if(d.result==='success'&&d.rates){
       const date=new Date().toISOString().slice(0,10);
       globalRateCache={rates:{USD:1,...d.rates},date};
-      localStorage.setItem('hp_rates',JSON.stringify(globalRateCache));
+      if (S) await S.setRates(globalRateCache);
       return {ok:true,fromCache:false};
     }
   }catch{}
-  // Fallback: frankfurter (no RUB)
+
+  /* ── Fallback: frankfurter (no RUB) ── */
   try{
     const curr=CURR_ALL.filter(c=>c!=='USD'&&c!=='RUB'&&c!=='BYN'&&c!=='KZT').join(',');
     const r=await fetch(`https://api.frankfurter.app/latest?from=USD&to=${curr}`);
@@ -533,10 +491,11 @@ async function ensureRates(){
     if(d.rates){
       const date=new Date().toISOString().slice(0,10);
       globalRateCache={rates:{USD:1,...d.rates},date,partial:true};
-      localStorage.setItem('hp_rates',JSON.stringify(globalRateCache));
+      if (S) await S.setRates(globalRateCache);
       return {ok:true,fromCache:false,partial:true};
     }
   }catch{}
+
   return {ok:false};
 }
 
@@ -590,7 +549,6 @@ function buildMonrate(){
     statusEl.textContent='Loading…';
     const res=await ensureRates();
     if(!res.ok){statusEl.textContent='⚠ There was a problem getting data from the API.';return;}
-    // rebuild selects with available currencies
     const avail=Object.keys(globalRateCache.rates);
     const all=[...CURR_PRIORITY,...CURR_EXTRA].filter(c=>avail.includes(c));
     [selF,selT].forEach(sel=>{
@@ -613,10 +571,10 @@ function buildMonrate(){
 }
 
 const searchSide = document.getElementById('search-side');
-const cmdSide = document.getElementById('cmd-side');
+const cmdSide    = document.getElementById('cmd-side');
 
 searchSide.addEventListener('mousedown', (e) => {
-  e.preventDefault(); // чтобы не было странного поведения
+  e.preventDefault();
   qEl.focus();
   setSide('search');
 });
@@ -627,5 +585,47 @@ cmdSide.addEventListener('mousedown', (e) => {
   setSide('cmd');
 });
 
+
 /* ══ UTILS ══ */
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+
+/* ══ NEWTAB MESSAGE LISTENER ══════════════════════════════════
+   Listens for messages from background.js:
+   BNT_BOOKMARK_REMOVED → show in-page notification
+══════════════════════════════════════════════════════════════ */
+if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'BNT_BOOKMARK_REMOVED') {
+      showRemovedNotice(msg.title, msg.bookmarkId);
+    }
+  });
+}
+
+function showRemovedNotice(title, bookmarkId) {
+  /* Remove any existing notice */
+  document.getElementById('bnt-removed-notice')?.remove();
+
+  const notice = document.createElement('div');
+  notice.id = 'bnt-removed-notice';
+  notice.innerHTML = `
+    <span class="bnt-notice-text">
+      <b>${esc(title || 'A bookmark')}</b> was removed from browser bookmarks
+    </span>
+    <div class="bnt-notice-actions">
+      <button class="bnt-notice-btn bnt-notice-remove" data-id="${esc(bookmarkId)}">Remove from panel</button>
+      <button class="bnt-notice-btn bnt-notice-dismiss">Dismiss</button>
+    </div>`;
+
+  notice.querySelector('.bnt-notice-remove').addEventListener('click', async () => {
+    const id = notice.querySelector('.bnt-notice-remove').dataset.id;
+    /* Tell bookmarks.js to remove the entry — dispatched as custom event */
+    document.dispatchEvent(new CustomEvent('bnt:remove-bookmark', { detail: { bookmarkId: id } }));
+    notice.remove();
+  });
+  notice.querySelector('.bnt-notice-dismiss').addEventListener('click', () => notice.remove());
+
+  document.body.appendChild(notice);
+  /* Auto-dismiss after 12 seconds */
+  setTimeout(() => notice?.remove(), 12000);
+}

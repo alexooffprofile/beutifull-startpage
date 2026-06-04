@@ -13,28 +13,9 @@
 
 <!-- ══ BOOKMARKS PANEL (left side, hover-reveal) ══ -->
 <div id="bm-panel" class="bm-collapsed">
-
-  <!-- Dimmed preview visible even when collapsed -->
   <div id="bm-content">
-
-    <!-- Tag filters -->
-    <div id="bm-tags">
-      <!-- injected by bookmarks.js -->
-    </div>
-
-    <!-- Add bookmark form -->
-    <div id="bm-add-row">
-      <input id="bm-add-url"   type="text" placeholder="https://…"          autocomplete="off" spellcheck="false">
-      <input id="bm-add-title" type="text" placeholder="Title (optional)"    autocomplete="off" spellcheck="false">
-      <button id="bm-add-btn" title="Add bookmark">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2.5" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Card list — injected by bookmarks.js -->
+    <!-- #bm-header, #bm-add-panel, #bm-toolbar injected by bookmarks.js -->
+    <div id="bm-tags"></div>
     <div id="bm-list"></div>
   </div>
 </div>
@@ -42,17 +23,16 @@
 <!-- ══ MAIN PAGE ══ -->
 <div id="page">
 
-  <!-- Clock: top-right corner -->
   <div id="clock-wrap">
     <div id="clock">00:00</div>
     <div id="date"></div>
   </div>
 
-  <!-- Search bar -->
+  <div id="shortcuts-row"></div>
+
   <div id="search-wrap" tabindex="-1">
     <div id="dual-bar">
 
-      <!-- LEFT: Search -->
       <div id="search-side" tabindex="-1">
         <button id="engine-btn" type="button" tabindex="-1">
           <span id="eng-icon"><i class="fa-brands fa-google"></i></span>
@@ -71,10 +51,8 @@
         </button>
       </div>
 
-      <!-- divider -->
       <div id="bar-divider"></div>
 
-      <!-- RIGHT: Command palette -->
       <div id="cmd-side">
         <svg id="cmd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -85,28 +63,27 @@
       </div>
     </div>
 
-    <!-- Single shared dropdown -->
     <div id="dropdown"></div>
   </div>
 
-  <div id="shortcuts">
-    <a class="shortcut" href="https://gmail.com" target="_blank">
-      <div class="shortcut-icon">✉️</div><span>Gmail</span>
-    </a>
-    <a class="shortcut" href="https://github.com" target="_blank">
-      <div class="shortcut-icon">🐙</div><span>GitHub</span>
-    </a>
-    <a class="shortcut" href="https://youtube.com" target="_blank">
-      <div class="shortcut-icon">▶️</div><span>YouTube</span>
-    </a>
-    <a class="shortcut" href="https://translate.google.com" target="_blank">
-      <div class="shortcut-icon">🌐</div><span>Translate</span>
-    </a>
-  </div>
 </div>
 
+<!--
+  Load order:
+  1. storage.js     — BNT_STORAGE class + BNT_STORAGE_READY promise (auto-inits)
+  2. migration.js   — one-time localStorage migration, sets BNT_MIGRATION_READY
+  3. bm-folders.js  — resolves folder IDs from background, sets BNT_FOLDERS_READY
+  4. mini_addons.js — small utilities (random title, favicon)
+  5. main_script.js — search bar, command palette, clock, widgets
+  6. bookmarks.js   — left panel (awaits BNT_STORAGE_READY + BNT_MIGRATION_READY + BNT_FOLDERS_READY)
+  7. shortcuts.js   — shortcut cards row (awaits BNT_FOLDERS_READY)
+-->
+<script src="storage.js"></script>
+<script src="migration.js"></script>
+<script src="bm-folders.js"></script>
 <script src="mini_addons.js"></script>
 <script src="main_script.js"></script>
 <script src="bookmarks.js"></script>
+<script src="shortcuts.js"></script>
 </body>
 </html>
