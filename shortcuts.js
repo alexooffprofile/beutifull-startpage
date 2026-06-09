@@ -37,54 +37,6 @@
     }
   }, { passive: false });
 
-  /* ══════════════════════════════════════════════════════════════════
-     CONTEXT MENU
-  ══════════════════════════════════════════════════════════════════ */
-  let ctxMenu = null;
-
-  function closeCtx() {
-    ctxMenu?.remove();
-    ctxMenu = null;
-  }
-
-  function showCtx(e, bmId, cardEl) {
-    closeCtx();
-
-    const menu = document.createElement('div');
-    menu.className = 'sc-ctx';
-
-    /* Keep menu within viewport */
-    const x = Math.min(e.clientX, window.innerWidth  - 220);
-    const y = Math.min(e.clientY, window.innerHeight - 100);
-    menu.style.cssText = `left:${x}px;top:${y}px`;
-
-    const actions = [
-      {
-        ico: '🖼',
-        txt: 'Change thumbnail',
-        fn:  () => pickThumb(bmId, cardEl),
-      },
-      ...(getThumb(bmId) ? [{
-        ico: '✕',
-        txt: 'Remove thumbnail',
-        fn:  () => { clearThumb(bmId); applyThumb(cardEl, null); },
-      }] : []),
-    ];
-
-    actions.forEach(({ ico, txt, fn }) => {
-      const item = document.createElement('div');
-      item.className = 'sc-ctx-item';
-      item.innerHTML = `<span class="sc-ctx-ico">${ico}</span><span>${txt}</span>`;
-      item.addEventListener('click', () => { fn(); closeCtx(); });
-      menu.appendChild(item);
-    });
-
-    document.body.appendChild(menu);
-    ctxMenu = menu;
-
-    setTimeout(() => document.addEventListener('mousedown', closeCtx, { once: true }), 0);
-  }
-
   /* ── Apply / clear thumbnail on a card ─────────────────────────── */
   function applyThumb(cardEl, dataUrl) {
     const bg = cardEl.querySelector('.sc-bg');
@@ -171,7 +123,6 @@
 
     /* ── Events ── */
     card.addEventListener('click', () => window.open(bm.url, '_blank'));
-    card.addEventListener('contextmenu', e => { e.preventDefault(); showCtx(e, bm.id, card); });
 
     return card;
   }
