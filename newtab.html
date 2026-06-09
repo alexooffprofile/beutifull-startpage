@@ -71,7 +71,6 @@
 <!--
   Load order:
   1. storage.js     — BNT_STORAGE class + BNT_STORAGE_READY promise (auto-inits)
-  2. migration.js   — one-time localStorage migration, sets BNT_MIGRATION_READY
   3. bm-folders.js  — resolves folder IDs from background, sets BNT_FOLDERS_READY
   4. mini_addons.js — small utilities (random title, favicon)
   5. main_script.js — search bar, command palette, clock, widgets
@@ -79,7 +78,6 @@
   7. shortcuts.js   — shortcut cards row (awaits BNT_FOLDERS_READY)
 -->
 <script src="storage.js"></script>
-<script src="migration.js"></script>
 <script src="bm-folders.js"></script>
 <script src="mini_addons.js"></script>
 <script src="main_script.js"></script>

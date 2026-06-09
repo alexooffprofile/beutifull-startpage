@@ -76,6 +76,19 @@
   const tagBar    = document.getElementById('bm-tags');
   const list      = document.getElementById('bm-list');
 
+  /* Wrap #bm-tags in #bm-tags-wrap so restore button can sit outside scroll area */
+  const tagsWrap = document.createElement('div');
+  tagsWrap.id = 'bm-tags-wrap';
+  tagBar.parentNode.insertBefore(tagsWrap, tagBar);
+  tagsWrap.appendChild(tagBar);
+
+  /* Horizontal scroll via mouse wheel on the tag bar */
+  tagBar.addEventListener('wheel', e => {
+    if (e.deltaY === 0) return;
+    e.preventDefault();
+    tagBar.scrollLeft += e.deltaY;
+  }, { passive: false });
+
   /* Remove legacy #bm-add-row if it exists in HTML */
   document.getElementById('bm-add-row')?.remove();
 
@@ -105,7 +118,7 @@
 
   const searchIn = document.createElement('input');
   searchIn.id = 'bm-search'; searchIn.type = 'text';
-  searchIn.placeholder = 'Search bookmarks…';
+  searchIn.placeholder = 'Search… or .tag / /tag';
   searchIn.autocomplete = 'off'; searchIn.spellcheck = false;
 
   const searchClear = document.createElement('button');
@@ -115,16 +128,48 @@
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
   </svg>`;
 
+  let tagSearchQuery = ''; /* separate state for tag-filter-via-search */
+
   searchIn.addEventListener('input', () => {
-    searchQuery = searchIn.value.trim().toLowerCase();
-    searchClear.classList.toggle('visible', searchQuery.length > 0);
+    const raw = searchIn.value;
+    const trimmed = raw.trim();
+
+    /* Tag search mode: starts with '.' or '/' */
+    if (/^[./]/.test(trimmed)) {
+      tagSearchQuery = trimmed.slice(1).toLowerCase();
+      searchQuery    = '';
+      /* Start filtering only from 2 chars after the prefix */
+      if (tagSearchQuery.length >= 2) {
+        const matched = S.getTags().filter(t =>
+          !t.hidden && t.name.toLowerCase().includes(tagSearchQuery)
+        );
+        activeTags = matched.length ? new Set(matched.map(t => t.id)) : new Set(['all']);
+      } else {
+        activeTags = new Set(['all']);
+      }
+      renderTags();
+    } else {
+      tagSearchQuery = '';
+      searchQuery    = trimmed.toLowerCase();
+    }
+
+    searchClear.classList.toggle('visible', raw.length > 0);
     renderList();
   });
   searchIn.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { searchIn.value=''; searchQuery=''; searchClear.classList.remove('visible'); renderList(); }
+    if (e.key === 'Escape') {
+      searchIn.value=''; searchQuery=''; tagSearchQuery='';
+      activeTags = new Set(['all']);
+      searchClear.classList.remove('visible');
+      renderTags(); renderList();
+    }
   });
   searchClear.addEventListener('click', () => {
-    searchIn.value=''; searchQuery=''; searchClear.classList.remove('visible'); searchIn.focus(); renderList();
+    searchIn.value=''; searchQuery=''; tagSearchQuery='';
+    activeTags = new Set(['all']);
+    searchClear.classList.remove('visible');
+    searchIn.focus();
+    renderTags(); renderList();
   });
   searchIn.addEventListener('focus', engagePanel);
   searchIn.addEventListener('blur',  () => { if (!searchQuery) releasePanel(); });
@@ -560,10 +605,11 @@
     }, 0);
   }
 
-    function renderTags() {
+  function renderTags() {
     tagBar.innerHTML = '';
     const tags = S.getTags().filter(t => !t.hidden);
 
+    /* Tags go directly into tagBar — it IS the scroll container */
     const allBtn = document.createElement('button');
     allBtn.className = 'bm-tag' + (activeTags.has('all') ? ' active' : '');
     allBtn.dataset.tag = 'all'; allBtn.textContent = 'All';
@@ -582,6 +628,7 @@
       }
       btn.addEventListener('click', e => setTag(tag.id, e.altKey));
       btn.addEventListener('contextmenu', e => { e.preventDefault(); openTagEditPopup(tag, btn); });
+      setupTagDrag(btn, tag.id);
       tagBar.appendChild(btn);
     });
 
@@ -595,22 +642,23 @@
     addTagBtn.onclick = openAddTagModal;
     tagBar.appendChild(addTagBtn);
 
-    /* Hidden site tags restore button — pinned to right edge */
+    /* Hidden site tags restore button — lives in tagsWrap OUTSIDE tagBar (no scroll clipping) */
+    tagsWrap.querySelector('.bm-tag-restore-btn')?.remove();
+
     const hiddenSiteTags = S.getTags().filter(t => t.siteTag && t.hidden);
     if (hiddenSiteTags.length) {
       const restoreBtn = document.createElement('button');
       restoreBtn.className = 'bm-tag-restore-btn';
-      restoreBtn.title = 'Restore hidden site tags';
+      restoreBtn.title = `Restore hidden site tags (${hiddenSiteTags.length})`;
       restoreBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
       </svg>`;
-      restoreBtn.title = `Restore hidden site tags (${hiddenSiteTags.length})`;
       restoreBtn.addEventListener('click', e => {
         e.stopPropagation();
         openRestoreTagsPopup(hiddenSiteTags, restoreBtn);
       });
-      tagBar.appendChild(restoreBtn);
+      tagsWrap.appendChild(restoreBtn);
     }
   }
 
@@ -730,8 +778,8 @@
 
     pop.append(nameIn, colorRow, btnRow);
 
-    /* Insert directly after tagBar in the DOM — part of normal flow, no animation issues */
-    tagBar.insertAdjacentElement('afterend', pop);
+    /* Insert directly after tagsWrap in the DOM — part of normal flow, no animation issues */
+    tagsWrap.insertAdjacentElement('afterend', pop);
     nameIn.focus();
     engagePanel();
 
@@ -1064,12 +1112,263 @@
     editBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openCardEditPopup(node, card, meta); });
     actionsRow.prepend(editBtn);
 
+    /* Drag handle */
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'bm-card-drag-handle';
+    dragHandle.title = 'Drag to reorder';
+    dragHandle.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="9" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="18" r="1" fill="currentColor"/><circle cx="15" cy="18" r="1" fill="currentColor"/></svg>`;
+    card.appendChild(dragHandle);
+
+    setupCardDrag(card, node.id, dragHandle);
+
     return card;
   }
 
   /* ══════════════════════════════════════════════════════════════
-     CARD EDIT POPUP  (edit title, url, thumbnail)
+     DRAG-AND-DROP  — reorder bookmark cards
   ══════════════════════════════════════════════════════════════ */
+  let _dragSrcId   = null;
+  let _dragOverEl  = null;
+
+  function setupCardDrag(card, nodeId, handle) {
+    card.draggable = false; /* dragging starts only from the handle */
+
+    handle.addEventListener('mousedown', () => { card.draggable = true; });
+    handle.addEventListener('mouseup',   () => { card.draggable = false; });
+
+    card.addEventListener('dragstart', e => {
+      _dragSrcId = nodeId;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', nodeId);
+      requestAnimationFrame(() => card.classList.add('bm-card-dragging'));
+    });
+
+    card.addEventListener('dragend', () => {
+      card.draggable = false;
+      card.classList.remove('bm-card-dragging');
+      _dragOverEl?.classList.remove('bm-card-drag-over-top', 'bm-card-drag-over-bottom');
+      _dragSrcId  = null;
+      _dragOverEl = null;
+    });
+
+    card.addEventListener('dragenter', e => { e.preventDefault(); });
+
+    card.addEventListener('dragover', e => {
+      if (!_dragSrcId || _dragSrcId === nodeId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      if (_dragOverEl && _dragOverEl !== card) {
+        _dragOverEl.classList.remove('bm-card-drag-over-top', 'bm-card-drag-over-bottom');
+      }
+      _dragOverEl = card;
+
+      const rect   = card.getBoundingClientRect();
+      const midY   = rect.top + rect.height / 2;
+      const isTop  = e.clientY < midY;
+      card.classList.toggle('bm-card-drag-over-top',    isTop);
+      card.classList.toggle('bm-card-drag-over-bottom', !isTop);
+    });
+
+    card.addEventListener('dragleave', e => {
+      if (!card.contains(e.relatedTarget)) {
+        card.classList.remove('bm-card-drag-over-top', 'bm-card-drag-over-bottom');
+      }
+    });
+
+    card.addEventListener('drop', async e => {
+      e.preventDefault();
+      card.classList.remove('bm-card-drag-over-top', 'bm-card-drag-over-bottom');
+      if (!_dragSrcId || _dragSrcId === nodeId) return;
+
+      const rect  = card.getBoundingClientRect();
+      const midY  = rect.top + rect.height / 2;
+      const after = e.clientY >= midY; /* drop below mid → insert after target */
+
+      /* Get current rendered order of card IDs from the DOM */
+      const cards = [...list.querySelectorAll('.bm-card[data-id]')];
+      const ids   = cards.map(c => c.dataset.id);
+
+      const srcIdx  = ids.indexOf(_dragSrcId);
+      const destIdx = ids.indexOf(nodeId);
+      if (srcIdx === -1 || destIdx === -1) return;
+
+      ids.splice(srcIdx, 1);
+      const insertAt = after ? destIdx + (srcIdx < destIdx ? 0 : 1) : (srcIdx < destIdx ? destIdx - 1 : destIdx);
+      const clampedInsert = Math.max(0, Math.min(insertAt, ids.length));
+      ids.splice(clampedInsert, 0, _dragSrcId);
+
+      /* Persist new order in meta.
+         We always save ascending indices (0,10,20…) but renderList sorts by
+         (order * direction), so we must store values that produce the correct
+         visual sequence regardless of sortAsc.
+         Solution: if sortAsc is false, invert the indices so that the
+         descending sort still renders the list in the dragged visual order. */
+      const total = ids.length;
+      await Promise.all(ids.map((id, idx) => {
+        const order = sortAsc ? idx * 10 : (total - 1 - idx) * 10;
+        return S.setMeta(id, { order });
+      }));
+
+      /* Re-render list without full reload — keeps panel stable */
+      renderList();
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     TAG DRAG-AND-DROP  — long-press 1.5s to activate, then reorder
+  ══════════════════════════════════════════════════════════════ */
+  let _tagDragSrcId  = null;
+  let _tagDragOverEl = null;
+  let _tagLongTimer  = null;
+
+  function setupTagDrag(btn, tagId) {
+    let didDrag    = false;
+    let pressX     = 0;
+    let pressY     = 0;
+    const MOVE_TOL = 20; /* px — cancel long-press only if moved more than this */
+
+    btn.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      didDrag = false;
+      pressX  = e.clientX;
+      pressY  = e.clientY;
+      _tagLongTimer = setTimeout(() => {
+        btn.draggable = true;
+        btn.classList.add('bm-tag-drag-ready');
+        const dragEvt = new MouseEvent('dragstart', { bubbles: true, cancelable: true });
+        btn.dispatchEvent(dragEvt);
+      }, 400);
+    });
+
+    const cancelLong = (e) => {
+      /* For mousemove: only cancel if moved beyond tolerance */
+      if (e?.type === 'mousemove') {
+        const dx = Math.abs(e.clientX - pressX);
+        const dy = Math.abs(e.clientY - pressY);
+        if (dx <= MOVE_TOL && dy <= MOVE_TOL) return;
+      }
+      clearTimeout(_tagLongTimer);
+      _tagLongTimer = null;
+    };
+    btn.addEventListener('mouseup',    cancelLong);
+    btn.addEventListener('mouseleave', cancelLong);
+    btn.addEventListener('mousemove',  cancelLong);
+
+    btn.addEventListener('dragstart', e => {
+      if (!btn.draggable) { e.preventDefault(); return; }
+      _tagDragSrcId = tagId;
+      didDrag = true;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tagId);
+      requestAnimationFrame(() => btn.classList.add('bm-tag-dragging'));
+      _startTagAutoScroll();
+    });
+
+    btn.addEventListener('dragend', () => {
+      btn.draggable = false;
+      btn.classList.remove('bm-tag-dragging', 'bm-tag-drag-ready');
+      _tagDragOverEl?.classList.remove('bm-tag-drag-over-left', 'bm-tag-drag-over-right');
+      _tagDragSrcId  = null;
+      _tagDragOverEl = null;
+      _stopTagAutoScroll();
+    });
+
+    /* Suppress click after a completed drag */
+    btn.addEventListener('click', e => {
+      if (didDrag) { e.stopImmediatePropagation(); didDrag = false; }
+    }, true);
+
+    btn.addEventListener('dragenter', e => { e.preventDefault(); });
+
+    btn.addEventListener('dragover', e => {
+      if (!_tagDragSrcId || _tagDragSrcId === tagId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      if (_tagDragOverEl && _tagDragOverEl !== btn) {
+        _tagDragOverEl.classList.remove('bm-tag-drag-over-left', 'bm-tag-drag-over-right');
+      }
+      _tagDragOverEl = btn;
+
+      const rect  = btn.getBoundingClientRect();
+      const midX  = rect.left + rect.width / 2;
+      const left  = e.clientX < midX;
+      btn.classList.toggle('bm-tag-drag-over-left',  left);
+      btn.classList.toggle('bm-tag-drag-over-right', !left);
+    });
+
+    btn.addEventListener('dragleave', e => {
+      if (!btn.contains(e.relatedTarget)) {
+        btn.classList.remove('bm-tag-drag-over-left', 'bm-tag-drag-over-right');
+      }
+    });
+
+    btn.addEventListener('drop', async e => {
+      e.preventDefault();
+      btn.classList.remove('bm-tag-drag-over-left', 'bm-tag-drag-over-right');
+      if (!_tagDragSrcId || _tagDragSrcId === tagId) return;
+
+      const rect  = btn.getBoundingClientRect();
+      const after = e.clientX >= rect.left + rect.width / 2;
+
+      /* Get current rendered tag order from DOM (skip All and + buttons) */
+      const tagBtns = [...tagBar.querySelectorAll('.bm-tag[data-tag]:not([data-tag="all"])')];
+      const ids = tagBtns.map(b => b.dataset.tag);
+
+      const srcIdx  = ids.indexOf(_tagDragSrcId);
+      const destIdx = ids.indexOf(tagId);
+      if (srcIdx === -1 || destIdx === -1) return;
+
+      ids.splice(srcIdx, 1);
+      const insertAt = after
+        ? destIdx + (srcIdx < destIdx ? 0 : 1)
+        : (srcIdx < destIdx ? destIdx - 1 : destIdx);
+      ids.splice(Math.max(0, Math.min(insertAt, ids.length)), 0, _tagDragSrcId);
+
+      /* Persist new order */
+      await Promise.all(ids.map((id, idx) =>
+        S.updateTag(id, { order: idx * 10 })
+      ));
+
+      renderTags();
+    });
+  }
+
+  let _tagAutoScrollRaf = null;
+  let _tagAutoScrollDir = 0;
+  const TAG_SCROLL_ZONE = 40;
+  const TAG_SCROLL_SPD  = 8;
+
+  function _startTagAutoScroll() {
+    tagBar._dragOverHandler = e => {
+      const rect = tagBar.getBoundingClientRect();
+      const x    = e.clientX - rect.left;
+      if (x < TAG_SCROLL_ZONE)                  _tagAutoScrollDir = -1;
+      else if (x > rect.width - TAG_SCROLL_ZONE) _tagAutoScrollDir =  1;
+      else                                        _tagAutoScrollDir =  0;
+    };
+    tagBar.addEventListener('dragover', tagBar._dragOverHandler);
+
+    const tick = () => {
+      if (_tagDragSrcId && _tagAutoScrollDir !== 0) {
+        tagBar.scrollLeft += _tagAutoScrollDir * TAG_SCROLL_SPD;
+      }
+      _tagAutoScrollRaf = requestAnimationFrame(tick);
+    };
+    _tagAutoScrollRaf = requestAnimationFrame(tick);
+  }
+
+  function _stopTagAutoScroll() {
+    cancelAnimationFrame(_tagAutoScrollRaf);
+    _tagAutoScrollRaf = null;
+    _tagAutoScrollDir = 0;
+    if (tagBar._dragOverHandler) {
+      tagBar.removeEventListener('dragover', tagBar._dragOverHandler);
+      delete tagBar._dragOverHandler;
+    }
+  }
+
   function openCardEditPopup(node, cardEl, meta) {
     document.getElementById('bm-card-edit-popup')?.remove();
     const pop = document.createElement('div'); pop.id = 'bm-card-edit-popup';
@@ -1210,9 +1509,30 @@
     bmNodes = await new Promise(r => chrome.bookmarks.getChildren(bmId, nodes => r(nodes || [])));
     bmNodes = bmNodes.filter(n => n.url);
 
+    /* Task 1: auto-hide orphaned site tags after any bookmark change */
+    await _pruneOrphanedSiteTags();
+
     /* Pick up any pending thumbnails left by background.js after prompt confirmation */
     await _applyPendingThumbs();
     render();
+  }
+
+  async function _pruneOrphanedSiteTags() {
+    const remainingHosts = new Set(bmNodes.map(n => hostname(n.url)));
+    const siteTags = S.getTags().filter(t => t.siteTag && t.hostname);
+    for (const tag of siteTags) {
+      if (!remainingHosts.has(tag.hostname)) {
+        /* Force-delete the site tag — bypass the siteTag guard in storage */
+        delete S._tags[tag.id];
+        /* Remove from active filter if it was selected */
+        if (activeTags.has(tag.id)) {
+          activeTags.delete(tag.id);
+          if (!activeTags.size) activeTags.add('all');
+        }
+      }
+    }
+    /* Persist in one write */
+    await new Promise(r => chrome.storage.local.set({ bnt_tags: S._tags }, r));
   }
 
   async function _applyPendingThumbs() {

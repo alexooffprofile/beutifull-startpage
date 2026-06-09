@@ -39,7 +39,6 @@
   const CS_COLORS   = 'bnt_colors';    // hostname → hex color
   const CS_RATES    = 'bnt_rates';     // currency widget cache
   const CS_SETTINGS = 'bnt_settings';  // global settings
-  const CS_MIGRATED = 'bnt_migrated';  // migration flag
 
   /* ══════════════════════════════════════════════════════════════
      TYPE DEFINITIONS  (JSDoc — no build step needed)
@@ -254,6 +253,13 @@
      */
     getTags() {
       return Object.values(this._tags).sort((a, b) => {
+        /* If both have an explicit order, use it */
+        const aHas = typeof a.order === 'number';
+        const bHas = typeof b.order === 'number';
+        if (aHas && bHas) return a.order - b.order;
+        if (aHas) return -1;
+        if (bHas) return 1;
+        /* Fallback: site tags first, then alphabetical */
         if (a.siteTag !== b.siteTag) return a.siteTag ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
@@ -275,6 +281,9 @@
      */
     async createTag({ name, color }) {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      /* Assign order = max existing order + 10 so new tags go to the end */
+      const orders = Object.values(this._tags).map(t => t.order ?? 0);
+      const nextOrder = orders.length ? Math.max(...orders) + 10 : 10;
       const tag = {
         id,
         name:     name.trim(),
@@ -282,6 +291,7 @@
         hidden:   false,
         siteTag:  false,
         hostname: null,
+        order:    nextOrder,
       };
       this._tags[id] = tag;
       await csSet({ [CS_TAGS]: this._tags });
@@ -302,6 +312,8 @@
       if (existing) return { ...existing };
 
       const id = 'site_' + hostname.replace(/\W/g, '_');
+      const orders = Object.values(this._tags).map(t => t.order ?? 0);
+      const nextOrder = orders.length ? Math.max(...orders) + 10 : 10;
       const tag = {
         id,
         name:     this._hostnameToLabel(hostname),
@@ -309,6 +321,7 @@
         hidden:   false,
         siteTag:  true,
         hostname,
+        order:    nextOrder,
       };
       this._tags[id] = tag;
       await csSet({ [CS_TAGS]: this._tags });
@@ -514,20 +527,6 @@
     async updateSettings(patch) {
       this._settings = { ...this._settings, ...patch };
       await csSet({ [CS_SETTINGS]: this._settings });
-    }
-
-    /* ────────────────────────────────────────────────────────────
-       MIGRATION FLAG
-    ──────────────────────────────────────────────────────────── */
-
-    /** @returns {Promise<boolean>} */
-    async isMigrated() {
-      const data = await csGet([CS_MIGRATED]);
-      return !!data[CS_MIGRATED];
-    }
-
-    async markMigrated() {
-      await csSet({ [CS_MIGRATED]: true });
     }
 
     /* ────────────────────────────────────────────────────────────
