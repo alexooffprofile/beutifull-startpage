@@ -89,6 +89,49 @@
     menu.style.top  = y + 'px';
   }
 
+  /* ── SVG icons reused across menus ─────────────────────────────── */
+  const ICO = {
+    settings: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+    </svg>`,
+    panel: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+    </svg>`,
+    search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>`,
+    edit: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    </svg>`,
+    trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+    </svg>`,
+  };
+
+  /* ── Detect context zone from click target ──────────────────────── */
+  function detectZone(target) {
+    if (target.closest('#bm-panel')) return 'bookmarks-panel';
+    return null;
+  }
+
+  /* ── Build settings entry based on zone ────────────────────────── */
+  function settingsItem(zone) {
+    if (zone === 'bookmarks-panel') {
+      return {
+        icon:   ICO.panel,
+        label:  "Customize 'Bookmarks Panel'",
+        action: () => window.BNT_SETTINGS?.open('bookmarks-panel'),
+      };
+    }
+    return {
+      icon:   ICO.settings,
+      label:  'Open Settings',
+      action: () => window.BNT_SETTINGS?.open(),
+    };
+  }
+
   /* ── Global contextmenu intercept ──────────────────────────────── */
   document.addEventListener('contextmenu', e => {
     /* Let elements with own logic handle it */
@@ -98,32 +141,28 @@
 
     e.preventDefault();
 
-    /* Default page items (3 test buttons) */
+    const zone = detectZone(e.target);
+
     show(e, [
       {
-        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>`,
-        label: 'Test action 1',
+        icon:   ICO.search,
+        label:  'Test action 1',
         action: () => {},
       },
       {
-        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-        </svg>`,
-        label: 'Test action 2',
+        icon:   ICO.edit,
+        label:  'Test action 2',
         action: () => {},
       },
       null,
       {
-        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-        </svg>`,
-        label: 'Test danger action',
+        icon:   ICO.trash,
+        label:  'Test danger action',
         action: () => {},
         danger: true,
       },
+      null,
+      settingsItem(zone),
     ]);
   });
 
