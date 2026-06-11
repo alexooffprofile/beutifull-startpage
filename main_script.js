@@ -88,6 +88,9 @@ document.addEventListener('keydown', function(e){
 
 document.addEventListener('keydown',e=>{
   if(e.key==='Control'){
+    /* Не реагируем если открыт оверлей настроек */
+    if (document.getElementById('bnt-settings-overlay')
+        ?.classList.contains('bnt-settings-visible')) return;
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if(activeSide!=='search' && activeSide!=='cmd'){
@@ -590,9 +593,104 @@ cmdSide.addEventListener('mousedown', (e) => {
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 
+/* ══ UNIVERSAL TOAST NOTIFICATION SYSTEM ══════════════════════
+   Публичное API: window.BNT_TOAST.show(options)
+
+   options {
+     title    : string                   — заголовок (жирный)
+     message  : string                   — подзаголовок (серый), опционально
+     type     : 'info' | 'success' | 'error' | 'warn'  — иконка и акцент
+     duration : number  (мс, default 5000, 0 = не скрывать)
+     actions  : [{ label, danger, onClick }]  — кнопки, опционально
+   }
+
+   Пример из любого файла:
+     window.BNT_TOAST.show({ title: 'Готово', type: 'success' });
+     window.BNT_TOAST.show({
+       title: 'Удалить?', type: 'warn', duration: 0,
+       actions: [
+         { label: 'Удалить', danger: true, onClick: () => doDelete() },
+         { label: 'Отмена' }
+       ]
+     });
+
+   Z-index: 200000 — выше всех оверлеев включая настройки.
+══════════════════════════════════════════════════════════════ */
+window.BNT_TOAST = (() => {
+  const ICONS = {
+    info:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    error:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    warn:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  };
+
+  /* Очередь: тосты стекаются снизу вверх */
+  const _stack = [];
+
+  function _reposition() {
+    let offset = 28;
+    for (let i = _stack.length - 1; i >= 0; i--) {
+      const el = _stack[i];
+      el.style.bottom = offset + 'px';
+      offset += el.offsetHeight + 8;
+    }
+  }
+
+  function show({ title = '', message = '', type = 'info', duration = 5000, actions = [] } = {}) {
+    const toast = document.createElement('div');
+    toast.className = 'bnt-toast';
+
+    const iconHtml = ICONS[type] || ICONS.info;
+    const iconClass = (type === 'error' || type === 'warn') ? ` ${type}` : '';
+
+    toast.innerHTML = `
+      <div class="bnt-toast-icon${iconClass}">${iconHtml}</div>
+      <div class="bnt-toast-body">
+        <div class="bnt-toast-title">${title}</div>
+        ${message ? `<div class="bnt-toast-msg">${message}</div>` : ''}
+      </div>
+      ${actions.length ? '<div class="bnt-toast-actions"></div>' : ''}
+    `;
+
+    if (actions.length) {
+      const actionsEl = toast.querySelector('.bnt-toast-actions');
+      actions.forEach(a => {
+        const btn = document.createElement('button');
+        btn.className = 'bnt-toast-btn' + (a.danger ? ' danger' : '');
+        btn.textContent = a.label;
+        btn.addEventListener('click', () => {
+          if (a.onClick) a.onClick();
+          dismiss(toast);
+        });
+        actionsEl.appendChild(btn);
+      });
+    }
+
+    document.body.appendChild(toast);
+    _stack.push(toast);
+    _reposition();
+
+    function dismiss(el) {
+      el.classList.add('bnt-toast-hiding');
+      el.addEventListener('animationend', () => {
+        el.remove();
+        const idx = _stack.indexOf(el);
+        if (idx !== -1) _stack.splice(idx, 1);
+        _reposition();
+      }, { once: true });
+    }
+
+    if (duration > 0) setTimeout(() => dismiss(toast), duration);
+
+    return { dismiss: () => dismiss(toast) };
+  }
+
+  return { show };
+})();
+
 /* ══ NEWTAB MESSAGE LISTENER ══════════════════════════════════
    Listens for messages from background.js:
-   BNT_BOOKMARK_REMOVED → show in-page notification
+   BNT_BOOKMARK_REMOVED → show toast notification
 ══════════════════════════════════════════════════════════════ */
 if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((msg) => {
@@ -603,29 +701,22 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 }
 
 function showRemovedNotice(title, bookmarkId) {
-  /* Remove any existing notice */
-  document.getElementById('bnt-removed-notice')?.remove();
-
-  const notice = document.createElement('div');
-  notice.id = 'bnt-removed-notice';
-  notice.innerHTML = `
-    <span class="bnt-notice-text">
-      <b>${esc(title || 'A bookmark')}</b> was removed from browser bookmarks
-    </span>
-    <div class="bnt-notice-actions">
-      <button class="bnt-notice-btn bnt-notice-remove" data-id="${esc(bookmarkId)}">Remove from panel</button>
-      <button class="bnt-notice-btn bnt-notice-dismiss">Dismiss</button>
-    </div>`;
-
-  notice.querySelector('.bnt-notice-remove').addEventListener('click', async () => {
-    const id = notice.querySelector('.bnt-notice-remove').dataset.id;
-    /* Tell bookmarks.js to remove the entry — dispatched as custom event */
-    document.dispatchEvent(new CustomEvent('bnt:remove-bookmark', { detail: { bookmarkId: id } }));
-    notice.remove();
+  window.BNT_TOAST.show({
+    title:    `${esc(title || 'A bookmark')} was removed`,
+    message:  'Removed from browser bookmarks',
+    type:     'warn',
+    duration: 0,
+    actions: [
+      {
+        label:   'Remove from panel',
+        danger:  true,
+        onClick: () => {
+          document.dispatchEvent(new CustomEvent('bnt:remove-bookmark', {
+            detail: { bookmarkId },
+          }));
+        },
+      },
+      { label: 'Dismiss' },
+    ],
   });
-  notice.querySelector('.bnt-notice-dismiss').addEventListener('click', () => notice.remove());
-
-  document.body.appendChild(notice);
-  /* Auto-dismiss after 12 seconds */
-  setTimeout(() => notice?.remove(), 12000);
 }

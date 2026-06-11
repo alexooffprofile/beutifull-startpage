@@ -33,6 +33,11 @@
 
   let _hideTimer = null;
 
+  /* Запоминаем элемент с фокусом и выделение ДО того как меню перехватит фокус */
+  let _ctxTarget      = null;   /* элемент под курсором при открытии меню */
+  let _ctxFocusedEl   = null;   /* input/textarea у которого был фокус */
+  let _ctxSelectedText = '';    /* выделенный текст на момент открытия меню */
+
   function hide() {
     menu.classList.remove('bnt-ctx-visible');
     clearTimeout(_hideTimer);
@@ -91,6 +96,14 @@
 
   /* ── SVG icons reused across menus ─────────────────────────────── */
   const ICO = {
+    copy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>`,
+    paste: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+    </svg>`,
     settings: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="3"/>
       <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
@@ -141,29 +154,86 @@
 
     e.preventDefault();
 
-    const zone = detectZone(e.target);
+    /* ── Снапшот состояния ДО того как меню заберёт фокус ── */
+    _ctxSelectedText = window.getSelection()?.toString().trim() ?? '';
+    const focusTag   = document.activeElement?.tagName;
+    _ctxFocusedEl    = (focusTag === 'INPUT' || focusTag === 'TEXTAREA'
+                        || document.activeElement?.isContentEditable)
+                       ? document.activeElement
+                       : null;
+    _ctxTarget = e.target;
 
-    show(e, [
-      {
-        icon:   ICO.search,
-        label:  'Test action 1',
-        action: () => {},
-      },
-      {
-        icon:   ICO.edit,
-        label:  'Test action 2',
-        action: () => {},
-      },
-      null,
-      {
-        icon:   ICO.trash,
-        label:  'Test danger action',
-        action: () => {},
-        danger: true,
-      },
-      null,
-      settingsItem(zone),
-    ]);
+    const zone   = detectZone(e.target);
+    const hasSel = _ctxSelectedText.length > 0;
+    const isInput = _ctxFocusedEl !== null;
+
+    const items = [];
+
+    if (hasSel) {
+      items.push({
+        icon:   ICO.copy,
+        label:  'Copy Text',
+        action: async () => {
+          try {
+            await navigator.clipboard.writeText(_ctxSelectedText);
+            window.BNT_TOAST?.show({ title: 'Copied', type: 'success', duration: 1800 });
+          } catch {
+            document.execCommand('copy');
+          }
+        },
+      });
+    }
+
+    if (isInput) {
+      items.push({
+        icon:   ICO.paste,
+        label:  'Paste Text',
+        /* Вставка через execCommand('paste') — единственный надёжный способ
+           в Firefox без разрешения clipboard-read.
+           Алгоритм:
+           1. Возвращаем фокус на сохранённый элемент (_ctxFocusedEl)
+           2. Вызываем execCommand('paste') синхронно — браузер подставит
+              свой буфер обмена напрямую без нашего доступа к содержимому.
+           3. Если execCommand не сработал (вернул false) — пробуем
+              clipboard API как запасной вариант. */
+        action: async () => {
+          const el = _ctxFocusedEl;
+          if (!el) return;
+
+          /* Возвращаем фокус */
+          el.focus();
+
+          /* Попытка 1: execCommand — работает в Firefox без разрешений */
+          const ok = document.execCommand('paste');
+          if (ok) return;
+
+          /* Попытка 2: Clipboard API (Chrome/Edge, Firefox с разрешением) */
+          try {
+            const text = await navigator.clipboard.readText();
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+              const s   = el.selectionStart ?? el.value.length;
+              const end = el.selectionEnd   ?? el.value.length;
+              el.value  = el.value.slice(0, s) + text + el.value.slice(end);
+              el.selectionStart = el.selectionEnd = s + text.length;
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+            } else if (el.isContentEditable) {
+              document.execCommand('insertText', false, text);
+            }
+          } catch {
+            /* Ни execCommand ни clipboard API не сработали —
+               Firefox требует явного разрешения clipboard-read.
+               Тихо игнорируем: браузер уже показал свой UI выше. */
+          }
+        },
+      });
+    }
+
+    /* Разделитель только если были clipboard-пункты */
+    if (items.length > 0) items.push(null);
+
+    items.push(settingsItem(zone));
+
+    show(e, items);
   });
 
   /* ── Close on outside click or Escape ──────────────────────────── */

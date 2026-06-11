@@ -15,7 +15,7 @@
      CONFIG
   ══════════════════════════════════════════════════════════════ */
   const CONFIG = {
-    PANEL_WIDTH_PCT : 32,
+    /* PANEL_WIDTH_PCT убран — ширина панели теперь хранится в BNT_STORAGE (settings.panelWidthPct) */
     HOVER_ZONE_PX   : 260,
     CLOSE_DELAY_MS  : 110,
     TAG_COLORS: [
@@ -92,7 +92,27 @@
   /* Remove legacy #bm-add-row if it exists in HTML */
   document.getElementById('bm-add-row')?.remove();
 
-  panel.style.setProperty('--bm-open-w', CONFIG.PANEL_WIDTH_PCT + 'vw');
+  /* ── Panel width ─────────────────────────────────────────────
+     applyPanelWidth() вызывается из init() ПОСЛЕ await BNT_STORAGE_READY,
+     поэтому значение всегда актуальное из IndexedDB.
+     Живые изменения (слайдер в настройках) приходят через CustomEvent.
+  ── */
+  function applyPanelWidth(pct) {
+    panel.style.setProperty('--bm-open-w', pct + 'vw');
+  }
+
+  /* React to live changes from the settings panel (no page reload needed) */
+  window.addEventListener('bnt:settings-changed', e => {
+    const d = e.detail;
+    if (!d) return;
+    if (d.panelWidthPct !== undefined) applyPanelWidth(d.panelWidthPct);
+    if (d.pinByDefault  !== undefined) setPin(d.pinByDefault);
+    if (d.cardRadius    !== undefined)
+      document.documentElement.style.setProperty('--bm-card-radius', d.cardRadius + 'px');
+    if (d.closeDelay    !== undefined) CONFIG.CLOSE_DELAY_MS = d.closeDelay;
+    if (d.accentMain    !== undefined)
+      document.documentElement.style.setProperty('--accent-main', d.accentMain);
+  });
 
   /* ══════════════════════════════════════════════════════════════
      BUILD HEADER  (#bm-header)
@@ -1597,6 +1617,21 @@
 
     /* Load settings */
     const settings = S.getSettings();
+
+    /* Apply panel width from storage — must run after await BNT_STORAGE_READY */
+    applyPanelWidth(settings.panelWidthPct ?? 32);
+
+    /* Pin by default */
+    if (settings.pinByDefault) setPin(true);
+
+    /* Card corner radius */
+    if (settings.cardRadius !== undefined) {
+      document.documentElement.style.setProperty('--bm-card-radius', settings.cardRadius + 'px');
+    }
+
+    /* Close delay */
+    CONFIG.CLOSE_DELAY_MS = settings.closeDelay ?? CONFIG.CLOSE_DELAY_MS;
+
     groupMode = settings.groupMode || 'none';
     groupBtns.querySelectorAll('.bm-group-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.mode === groupMode);

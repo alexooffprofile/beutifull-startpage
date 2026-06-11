@@ -92,16 +92,21 @@ body::before {
   pointer-events: auto;
 }
 
-/* ── Content wrapper ── always full internal width ── */
+/* ── Content wrapper ────────────────────────────────────────────
+   Ключевая идея: контент имеет фиксированную ширину = --bm-open-w,
+   и НЕ сжимается вместе с панелью. Панель ограничивает видимость
+   через overflow:hidden — контент просто «обрезается» при схлопывании.
+   Это означает что текст/кнопки всегда читаемы когда панель открыта,
+   и не перекомпонуются при анимации.
+   ────────────────────────────────────────────────────────────────── */
 #bm-content {
-  width: var(--bm-open-w);
-  min-width: 0;
-  min-width: var(--bm-open-w);
-  flex: 1;
+  width: var(--bm-open-w);          /* всегда равна открытой ширине */
+  min-width: var(--bm-open-w);      /* не даём flex сжать */
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Blur + dim the strip that peeks out when collapsed */
+  /* Blur + dim при схлопывании — strip что выглядывает в свёрнутом виде */
   transition: filter var(--tr-s), opacity var(--tr-s);
 }
 #bm-panel.bm-collapsed #bm-content {
@@ -162,7 +167,7 @@ body::before {
 }
 #bm-search-wrap:focus-within {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px var(--accent-search-glow);
+  box-shadow: 0 0 2px 1px var(--accent-main);
 }
 
 #bm-search-ico {
@@ -171,7 +176,7 @@ body::before {
   color: var(--text-muted);
   transition: color var(--tr-s);
 }
-#bm-search-wrap:focus-within #bm-search-ico { color: var(--accent-search); }
+#bm-search-wrap:focus-within #bm-search-ico { color: var(--accent-main); }
 
 #bm-search {
   flex: 1;
@@ -332,12 +337,13 @@ body::before {
    BOOKMARK CARDS
    ═══════════════════════════════════════════════════════════════ */
 .bm-card {
-  position: relative; border-radius: 14px; overflow: hidden;
+  position: relative;
+  border-radius: var(--bm-card-radius, 14px); /* управляется из настроек Card corner radius */
+  overflow: hidden;
   border: 1px solid var(--border); cursor: pointer;
   transition: border-color var(--tr-s), box-shadow var(--tr-s);
   display: flex; flex-direction: column;
   background: var(--surface2);
-  /* Prevent cards from collapsing when panel is narrow */
   flex-shrink: 0;
   min-height: 80px;
   width: 100%;
@@ -1296,7 +1302,7 @@ body:not(.focused)  ::selection { background: rgba(126,255,132,.35); } /* --acce
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 9200;
+  z-index: 200000;  /* выше всех оверлеев */
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1311,6 +1317,68 @@ body:not(.focused)  ::selection { background: rgba(126,255,132,.35); } /* --acce
 @keyframes bnt-notice-in {
   from { opacity:0; transform: translateX(-50%) translateY(10px); }
   to   { opacity:1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes bnt-toast-out {
+  to { opacity:0; transform: translateX(-50%) translateY(8px); }
+}
+/* ── Universal toast notification ── */
+.bnt-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200000;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.55);
+  animation: bnt-notice-in .28s cubic-bezier(.34,1.46,.64,1) both;
+  max-width: 480px;
+  min-width: 220px;
+  pointer-events: all;
+}
+.bnt-toast.bnt-toast-hiding {
+  animation: bnt-toast-out .22s ease forwards;
+}
+.bnt-toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--accent-main);
+}
+.bnt-toast-icon.error { color: #ff6b6b; }
+.bnt-toast-icon.warn  { color: #fbbf24; }
+.bnt-toast-body { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.bnt-toast-title { font-size: .8rem; font-weight: 600; color: var(--text); }
+.bnt-toast-msg   { font-size: .75rem; color: var(--text-dim); }
+.bnt-toast-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.bnt-toast-btn {
+  border: none;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: .72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--tr-s);
+  background: var(--surface3);
+  color: var(--text-dim);
+}
+.bnt-toast-btn:hover { filter: brightness(1.2); }
+.bnt-toast-btn.danger { background: rgba(255,107,107,.18); color: #ff6b6b; }
+.bnt-toast-btn.danger:hover { background: rgba(255,107,107,.3); }
+/* Иконка "импортировано" рядом с названием пресета */
+.bnt-preset-imported-ico {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  margin-left: 4px;
+  vertical-align: middle;
+  opacity: .7;
 }
 .bnt-notice-text { font-size: .8rem; color: var(--text-dim); flex: 1; }
 .bnt-notice-text b { color: var(--text); }
@@ -1702,10 +1770,13 @@ body:not(.focused)  ::selection { background: rgba(126,255,132,.35); } /* --acce
   pointer-events: all;
 }
 
+/* min(A, B) — берёт меньшее из двух значений.
+   1340px/840px — твои максимумы. 104vw/100vh — «не шире/выше экрана».
+   104vw чуть > 100 чтобы на маленьких экранах панель не обрезалась по краям. */
 #bnt-settings-panel {
   display: flex;
-  width: min(1020px, 94vw);
-  height: min(680px, 90vh);
+  width: min(1340px, 104vw);
+  height: min(840px, 100vh);
   background: var(--surface1);
   border: 1px solid var(--border-focus);
   border-radius: 16px;
@@ -1795,7 +1866,8 @@ body:not(.focused)  ::selection { background: rgba(126,255,132,.35); } /* --acce
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
+  flex: 1;                 /* растягивается, прижимая preset-panel вниз */
+  overflow-y: auto;
 }
 .bnt-s-nav-btn {
   display: flex;
@@ -1918,6 +1990,125 @@ body:not(.focused)  ::selection { background: rgba(126,255,132,.35); } /* --acce
   font-style: italic;
 }
 
+/* ── Toggle switch (boolean settings) ── */
+.bnt-s-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.bnt-s-toggle input {
+  opacity: 0;
+  width: 0; height: 0;
+  position: absolute;
+}
+.bnt-s-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: background var(--tr-s), border-color var(--tr-s);
+}
+.bnt-s-toggle input:checked ~ .bnt-s-toggle-track {
+  background: var(--accent-main);
+  border-color: var(--accent-main);
+}
+.bnt-s-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform var(--tr-s), background var(--tr-s);
+  pointer-events: none;
+}
+.bnt-s-toggle input:checked ~ .bnt-s-toggle-thumb {
+  transform: translateX(16px);
+  background: #0e0f13;
+}
+
+/* ── Color picker button ── */
+.bnt-s-color-btn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: border-color var(--tr-s), box-shadow var(--tr-s);
+  background: var(--accent-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bnt-s-color-btn:hover {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-main-glow);
+}
+.bnt-s-color-btn input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.bnt-s-color-btn-ico {
+  pointer-events: none;
+  color: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Slider control (panel width etc.) ── */
+.bnt-s-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 160px;
+}
+.bnt-s-slider-wrap input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent-main);
+}
+.bnt-s-slider-wrap input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(126,255,132,0.4);
+  transition: transform .15s;
+}
+.bnt-s-slider-wrap input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.bnt-s-slider-val {
+  font-size: .75rem;
+  color: var(--accent-main);
+  min-width: 2.8em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Search results view ── */
 #bnt-s-search-results .bnt-s-result-cat {
   font-size: .68rem;
@@ -1944,58 +2135,193 @@ body:not(.focused)  ::selection { background: rgba(126,255,132,.35); } /* --acce
   color: var(--text-muted);
   font-size: .83rem;
 }
+/* Явно скрываем — иначе display:flex перебивает атрибут [hidden] */
+#bnt-s-no-results[hidden] { display: none !important; }
 #bnt-s-no-results svg { opacity: .3; }
 
-/* ── Footer (preset bar) ── */
-#bnt-settings-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+/* ── Sidebar preset panel ── */
+#bnt-s-preset-panel {
   border-top: 1px solid var(--border);
+  padding: 10px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   flex-shrink: 0;
-  background: var(--surface2);
 }
-.bnt-s-footer-btn {
+#bnt-s-preset-label {
+  font-size: .65rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 6px;
+}
+
+/* Кнопка-дропдаун */
+#bnt-s-preset-dropdown-wrap {
+  position: relative;
+}
+#bnt-s-preset-btn {
+  width: 100%;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 7px 10px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: .80rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--tr-s), background var(--tr-s);
+}
+#bnt-s-preset-btn:hover { border-color: var(--border-focus); }
+#bnt-s-preset-btn.open  { border-color: var(--accent-main); }
+#bnt-s-preset-btn svg   { flex-shrink: 0; color: var(--text-muted); transition: transform .15s; }
+#bnt-s-preset-btn.open svg { transform: rotate(180deg); }
+#bnt-s-preset-btn-name  { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Выпадающий список */
+#bnt-s-preset-list {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  z-index: 10;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.bnt-s-preset-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: .80rem;
+  color: var(--text-dim);
+  transition: background var(--tr-s), color var(--tr-s);
+  user-select: none;
+}
+.bnt-s-preset-item:hover     { background: var(--surface3); color: var(--text); }
+.bnt-s-preset-item.active    { color: var(--accent-main); background: rgba(126,255,132,.08); }
+.bnt-s-preset-item-name      { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bnt-s-preset-add {
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-style: italic;
+  gap: 6px;
+}
+.bnt-s-preset-add:hover { color: var(--accent-main); background: rgba(126,255,132,.06); }
+.bnt-s-preset-del {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity .15s, color .15s, background .15s;
+}
+.bnt-s-preset-item:hover .bnt-s-preset-del { opacity: 1; }
+.bnt-s-preset-del:hover { color: #ff6b6b; background: rgba(255,107,107,.12); }
+
+/* Import / Save row */
+#bnt-s-preset-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.bnt-s-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
   background: none;
   border: 1px solid var(--border);
   border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
-  font-size: .76rem;
+  font-size: .74rem;
   color: var(--text-dim);
   cursor: pointer;
-  flex-shrink: 0;
-  transition: background var(--tr-s), border-color var(--tr-s), color var(--tr-s);
   white-space: nowrap;
+  transition: background var(--tr-s), border-color var(--tr-s), color var(--tr-s);
 }
-.bnt-s-footer-btn:hover { background: var(--surface3); border-color: var(--border-focus); color: var(--text); }
+.bnt-s-action-btn:hover { background: var(--surface3); border-color: var(--border-focus); color: var(--text); }
 .bnt-s-save-btn { border-color: rgba(126,255,132,.3); color: var(--accent-main); }
-.bnt-s-save-btn:hover { background: rgba(126,255,132,.1); border-color: var(--accent-main); }
-.bnt-s-btn-disabled { opacity: .35; cursor: not-allowed !important; }
-.bnt-s-btn-disabled:hover { background: none !important; border-color: var(--border) !important; color: var(--text-muted) !important; }
-
-#bnt-s-preset-wrap {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  justify-content: center;
+.bnt-s-save-btn:hover { background: rgba(126,255,132,.1) !important; border-color: var(--accent-main) !important; color: var(--accent-main) !important; }
+/* Disabled state для кнопок (например Save на Default пресете) */
+.bnt-s-btn-disabled {
+  opacity: .35 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
 }
-#bnt-s-preset-select {
+
+/* ── Popup: create/rename preset ── */
+#bnt-s-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s;
+}
+#bnt-s-popup-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+#bnt-s-popup {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 20px 16px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.6);
+  transform: translateY(10px);
+  transition: transform .18s;
+}
+#bnt-s-popup-overlay.visible #bnt-s-popup {
+  transform: translateY(0);
+}
+#bnt-s-popup-title {
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+#bnt-s-popup-input {
   background: var(--surface3);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 5px 10px;
+  padding: 7px 10px;
   font-family: 'DM Sans', sans-serif;
-  font-size: .76rem;
-  color: var(--text-dim);
-  cursor: pointer;
+  font-size: .82rem;
+  color: var(--text);
   outline: none;
-  min-width: 160px;
-  max-width: 260px;
+  caret-color: var(--accent-main);
   transition: border-color var(--tr-s);
+  width: 100%;
+  box-sizing: border-box;
 }
-#bnt-s-preset-select:focus { border-color: var(--accent-main); }
+#bnt-s-popup-input:focus { border-color: var(--accent-main); }
+#bnt-s-popup-input::placeholder { color: var(--text-muted); }
+#bnt-s-popup-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}

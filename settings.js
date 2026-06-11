@@ -5,9 +5,12 @@
  *  - Full-page overlay with sidebar navigation
  *  - Settings search (sidebar)
  *  - Row icons per setting item
- *  - Footer: preset selector (Default + user presets) · Import · Save
- *  - Presets stored in chrome.storage.local under bnt_presets / bnt_active_preset
- *  - Save exports current settings as .json; Import reads it back
+ *  - Preset panel in sidebar bottom: dropdown list + Import / Save buttons
+ *  - Popups for creating/renaming presets (no native prompt())
+ *  - Default preset resets all settings to SETTINGS_CONFIG defaults
+ *  - Auto-creates "My settings" preset when user changes any value
+ *  - Presets stored in chrome.storage.local: bnt_presets / bnt_active_preset
+ *  - Save exports active preset as .json; Import reads it back
  *
  * API:
  *   window.BNT_SETTINGS.open(categoryId?)
@@ -16,6 +19,71 @@
 
 (() => {
   'use strict';
+
+  /* ══════════════════════════════════════════════════════════════
+     SETTINGS CONFIG
+     ──────────────────────────────────────────────────────────────
+     Все числовые параметры настроек собраны здесь.
+     Чтобы изменить диапазон или дефолт — правь только этот блок.
+  ══════════════════════════════════════════════════════════════ */
+  const SETTINGS_CONFIG = {
+
+    /**
+     * Ширина панели закладок (vw — проценты от ширины viewport).
+     * Слайдер "Panel width" в категории Bookmarks.
+     *   MIN_VW  — минимально возможная ширина (не даём сжать до нечитаемого)
+     *   MAX_VW  — максимально возможная ширина
+     *   DEFAULT — значение при первом запуске / сбросе
+     */
+    PANEL_WIDTH_MIN_VW  : 20,
+    PANEL_WIDTH_MAX_VW  : 50,
+    PANEL_WIDTH_DEFAULT : 32,
+
+    /**
+     * Pin панели закладок по умолчанию при каждом открытии новой вкладки.
+     *   DEFAULT — false (панель сворачивается)
+     */
+    PIN_DEFAULT : false,
+
+    /**
+     * Основной акцентный цвет (hex). Применяется к --accent-main в :root.
+     * Используется для тегов, кнопок, слайдеров, рамок фокуса.
+     */
+    ACCENT_MAIN_DEFAULT : '#7eff84',
+
+    /**
+     * Радиус скругления карточек закладок (px).
+     *   MIN / MAX / DEFAULT — диапазон и дефолт.
+     */
+    CARD_RADIUS_MIN     : 0,
+    CARD_RADIUS_MAX     : 24,
+    CARD_RADIUS_DEFAULT : 14,
+
+    /**
+     * Задержка автозакрытия панели (мс).
+     * Как долго панель остаётся открытой после того как курсор ушёл.
+     *   MIN / MAX / DEFAULT
+     */
+    CLOSE_DELAY_MIN     : 50,
+    CLOSE_DELAY_MAX     : 800,
+    CLOSE_DELAY_DEFAULT : 110,
+
+  };
+
+  /**
+   * Возвращает объект «чистых» дефолтных настроек.
+   * Используется при сбросе на Default и при авто-создании My settings.
+   * Добавляй сюда новые настройки по мере появления.
+   */
+  function defaultSettings() {
+    return {
+      panelWidthPct  : SETTINGS_CONFIG.PANEL_WIDTH_DEFAULT,
+      pinByDefault   : SETTINGS_CONFIG.PIN_DEFAULT,
+      accentMain     : SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT,
+      cardRadius     : SETTINGS_CONFIG.CARD_RADIUS_DEFAULT,
+      closeDelay     : SETTINGS_CONFIG.CLOSE_DELAY_DEFAULT,
+    };
+  }
 
   /* ══════════════════════════════════════════════════════════════
      ICONS  (shared small SVG snippets)
@@ -69,29 +137,30 @@
       ],
     },
     {
-      id:    'main-zone',
-      label: 'Main Zone',
-      icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>`,
+      id:    'themes',
+      label: 'Themes & Colors',
+      icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M8 12a4 4 0 0 1 8 0"/></svg>`,
       sections: [
         {
           title: 'Accent Colors',
           rows: [
-            { icon: 'palette', label: 'Main accent',     desc: 'Default highlight color — tags, buttons, selection' },
-            { icon: 'palette', label: 'Search accent',   desc: 'Color when the search bar is focused' },
-            { icon: 'palette', label: 'Command accent',  desc: 'Color when the command palette is active' },
+            { icon: 'palette', label: 'Main accent',    desc: 'Primary highlight color — tags, buttons, focus rings, sliders' },
+            { icon: 'palette', label: 'Search accent',  desc: 'Color when the search bar is focused' },
+            { icon: 'palette', label: 'Command accent', desc: 'Color when the command palette is active' },
           ],
         },
         {
           title: 'Background',
           rows: [
-            { icon: 'brush',   label: 'Background color', desc: 'Base page background' },
-            { icon: 'image',   label: 'Background image', desc: 'Custom wallpaper or gradient overlay' },
+            { icon: 'brush',   label: 'Background color', desc: 'Base page background color' },
+            { icon: 'image',   label: 'Background image', desc: 'Custom wallpaper — URL or local file' },
           ],
         },
         {
           title: 'Typography',
           rows: [
-            { icon: 'type',    label: 'Clock font size',  desc: 'Size of the main clock display' },
+            { icon: 'type',    label: 'Clock font size', desc: 'Size of the main clock display' },
+            { icon: 'type',    label: 'UI font size',    desc: 'Base font size for the whole interface' },
           ],
         },
       ],
@@ -112,7 +181,13 @@
           title: 'Cards',
           rows: [
             { icon: 'eye',    label: 'Card thumbnail',    desc: 'Show or hide bookmark thumbnails' },
-            { icon: 'corner', label: 'Card corner radius', desc: 'Roundness of bookmark cards' },
+            { icon: 'corner', label: 'Card corner radius', desc: 'Roundness of bookmark cards (px)' },
+          ],
+        },
+        {
+          title: 'Animation',
+          rows: [
+            { icon: 'clock', label: 'Close delay', desc: 'How long the panel stays open after the cursor leaves (ms)' },
           ],
         },
         {
@@ -201,6 +276,31 @@
             </button>
           `).join('')}
         </nav>
+
+        <!-- ── Preset panel (sidebar bottom) ── -->
+        <div id="bnt-s-preset-panel">
+          <div id="bnt-s-preset-label">Presets</div>
+
+          <div id="bnt-s-preset-dropdown-wrap">
+            <button id="bnt-s-preset-btn" title="Switch preset">
+              <span id="bnt-s-preset-btn-name">Default</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div id="bnt-s-preset-list" hidden></div>
+          </div>
+
+          <div id="bnt-s-preset-actions">
+            <button id="bnt-s-import-btn" class="bnt-s-action-btn" title="Import settings from file">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Import
+            </button>
+            <input id="bnt-s-import-file" type="file" accept=".json" style="display:none">
+            <button id="bnt-s-save-btn" class="bnt-s-action-btn bnt-s-save-btn" title="Export active preset to file">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="bnt-s-save-label">Save</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- ── Content area ── -->
@@ -224,26 +324,27 @@
           </div>
         </div>
 
-        <!-- Footer: presets bar -->
-        <div id="bnt-settings-footer">
-          <button id="bnt-s-import-btn" class="bnt-s-footer-btn" title="Import settings from file">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Import
-          </button>
-          <input id="bnt-s-import-file" type="file" accept=".json" style="display:none">
-
-          <div id="bnt-s-preset-wrap">
-            <select id="bnt-s-preset-select" title="Active preset"></select>
-          </div>
-
-          <button id="bnt-s-save-btn" class="bnt-s-footer-btn bnt-s-save-btn" title="Export current settings to file">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span id="bnt-s-save-label">Save</span>
-          </button>
-        </div>
       </div>
     </div>
   `;
+
+  /* ── Popup: создать/переименовать пресет ─────────────────────
+     Единый модальный попап, mode = 'create' | 'rename'
+  ── */
+  const presetPopup = document.createElement('div');
+  presetPopup.id = 'bnt-s-popup-overlay';
+  presetPopup.setAttribute('aria-hidden', 'true');
+  presetPopup.innerHTML = `
+    <div id="bnt-s-popup">
+      <div id="bnt-s-popup-title">Save preset</div>
+      <input id="bnt-s-popup-input" type="text" placeholder="Preset name…" autocomplete="off" spellcheck="false" maxlength="40">
+      <div id="bnt-s-popup-btns">
+        <button id="bnt-s-popup-cancel" class="bnt-s-action-btn">Cancel</button>
+        <button id="bnt-s-popup-ok"     class="bnt-s-action-btn bnt-s-save-btn">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(presetPopup);
 
   document.body.appendChild(overlay);
 
@@ -256,17 +357,155 @@
   const elNoResults    = $('bnt-s-no-results');
   const elSearch       = $('bnt-s-search');
   const elSearchClear  = $('bnt-s-search-clear');
-  const elPresetSel    = $('bnt-s-preset-select');
+
+  /* Preset panel refs */
+  const elPresetBtn    = $('bnt-s-preset-btn');
+  const elPresetBtnName= $('bnt-s-preset-btn-name');
+  const elPresetList   = $('bnt-s-preset-list');
   const elSaveBtn      = $('bnt-s-save-btn');
+  const elSaveLabel    = $('bnt-s-save-label');
   const elImportBtn    = $('bnt-s-import-btn');
   const elImportFile   = $('bnt-s-import-file');
-  const elSaveLabel    = $('bnt-s-save-label');
+
+  /* Popup refs (appended to body, use document.getElementById) */
+  const ppOverlay  = document.getElementById('bnt-s-popup-overlay');
+  const ppTitle    = document.getElementById('bnt-s-popup-title');
+  const ppInput    = document.getElementById('bnt-s-popup-input');
+  const ppOk       = document.getElementById('bnt-s-popup-ok');
+  const ppCancel   = document.getElementById('bnt-s-popup-cancel');
 
   /* ══════════════════════════════════════════════════════════════
      RENDER HELPERS
   ══════════════════════════════════════════════════════════════ */
 
   /** Build a single settings row element */
+  /* ══════════════════════════════════════════════════════════════
+     CONTROL BUILDERS
+     Каждый row.label матчится на свой билдер контрола.
+     Добавляя новую строку — добавь case здесь же.
+  ══════════════════════════════════════════════════════════════ */
+
+  /** Универсальный toggle-switch */
+  function buildToggle(storageKey, defaultVal, onChange) {
+    const S = window.BNT_STORAGE;
+    const current = S ? (S.getSettings()[storageKey] ?? defaultVal) : defaultVal;
+
+    const label = document.createElement('label');
+    label.className = 'bnt-s-toggle bnt-s-control';
+    label.innerHTML = `
+      <input type="checkbox" ${current ? 'checked' : ''}>
+      <span class="bnt-s-toggle-track"></span>
+      <span class="bnt-s-toggle-thumb"></span>
+    `;
+    const input = label.querySelector('input');
+    input.addEventListener('change', async () => {
+      const v = input.checked;
+      if (S) await S.updateSettings({ [storageKey]: v });
+      window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { [storageKey]: v } }));
+      if (onChange) onChange(v);
+    });
+    return label;
+  }
+
+  /** Универсальный color-picker с кнопкой-кружком */
+  function buildColorPicker(storageKey, defaultVal, cssVar) {
+    const S = window.BNT_STORAGE;
+    const current = S ? (S.getSettings()[storageKey] ?? defaultVal) : defaultVal;
+
+    const btn = document.createElement('div');
+    btn.className = 'bnt-s-color-btn bnt-s-control';
+    btn.style.background = current;
+    btn.innerHTML = `
+      <span class="bnt-s-color-btn-ico">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+      </span>
+      <input type="color" value="${current}">
+    `;
+    const input = btn.querySelector('input[type="color"]');
+
+    /* Live preview */
+    input.addEventListener('input', () => {
+      btn.style.background = input.value;
+      if (cssVar) document.documentElement.style.setProperty(cssVar, input.value);
+    });
+
+    /* Persist on close */
+    input.addEventListener('change', async () => {
+      const v = input.value;
+      btn.style.background = v;
+      if (cssVar) document.documentElement.style.setProperty(cssVar, v);
+      if (S) await S.updateSettings({ [storageKey]: v });
+      window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { [storageKey]: v } }));
+    });
+
+    return btn;
+  }
+
+  /** Универсальный слайдер */
+  function buildSlider(storageKey, min, max, defaultVal, unit = '', onChange) {
+    const S = window.BNT_STORAGE;
+    const current = S ? (S.getSettings()[storageKey] ?? defaultVal) : defaultVal;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-s-control bnt-s-slider-wrap';
+    wrap.innerHTML = `
+      <input type="range" min="${min}" max="${max}" step="1" value="${current}">
+      <span class="bnt-s-slider-val">${current}${unit}</span>
+    `;
+    const slider = wrap.querySelector('input');
+    const valEl  = wrap.querySelector('.bnt-s-slider-val');
+
+    slider.addEventListener('input', () => {
+      const v = Number(slider.value);
+      valEl.textContent = v + unit;
+      window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { [storageKey]: v } }));
+      if (onChange) onChange(v);
+    });
+    slider.addEventListener('change', async () => {
+      const v = Number(slider.value);
+      if (S) await S.updateSettings({ [storageKey]: v });
+    });
+    return wrap;
+  }
+
+  /* ── Build the control element for a settings row ── */
+  function buildControl(row) {
+    /* ── Bookmarks Panel ── */
+    if (row.label === 'Panel width') {
+      const { PANEL_WIDTH_MIN_VW, PANEL_WIDTH_MAX_VW, PANEL_WIDTH_DEFAULT } = SETTINGS_CONFIG;
+      return buildSlider('panelWidthPct', PANEL_WIDTH_MIN_VW, PANEL_WIDTH_MAX_VW, PANEL_WIDTH_DEFAULT, '%');
+    }
+
+    if (row.label === 'Pin panel by default') {
+      return buildToggle('pinByDefault', SETTINGS_CONFIG.PIN_DEFAULT);
+    }
+
+    if (row.label === 'Card corner radius') {
+      const { CARD_RADIUS_MIN, CARD_RADIUS_MAX, CARD_RADIUS_DEFAULT } = SETTINGS_CONFIG;
+      return buildSlider('cardRadius', CARD_RADIUS_MIN, CARD_RADIUS_MAX, CARD_RADIUS_DEFAULT, 'px', v => {
+        document.documentElement.style.setProperty('--bm-card-radius', v + 'px');
+      });
+    }
+
+    if (row.label === 'Close delay') {
+      const { CLOSE_DELAY_MIN, CLOSE_DELAY_MAX, CLOSE_DELAY_DEFAULT } = SETTINGS_CONFIG;
+      return buildSlider('closeDelay', CLOSE_DELAY_MIN, CLOSE_DELAY_MAX, CLOSE_DELAY_DEFAULT, 'ms');
+    }
+
+    /* ── Themes & Colors ── */
+    if (row.label === 'Main accent') {
+      return buildColorPicker('accentMain', SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT, '--accent-main');
+    }
+
+    /* Default — placeholder for rows not yet implemented */
+    const el = document.createElement('div');
+    el.className = 'bnt-s-control bnt-s-placeholder';
+    el.textContent = 'Coming soon';
+    return el;
+  }
+
   function buildRow(row, highlight = '') {
     const el = document.createElement('div');
     el.className = 'bnt-s-row';
@@ -276,14 +515,17 @@
       ? `<span class="bnt-s-row-ico">${ICO[row.icon]}</span>`
       : '';
 
-    el.innerHTML = `
-      ${iconHtml}
-      <div class="bnt-s-row-label">
-        <span>${labelHtml}</span>
-        <span class="bnt-s-row-desc">${row.desc || ''}</span>
-      </div>
-      <div class="bnt-s-control bnt-s-placeholder">Coming soon</div>
+    const labelWrap = document.createElement('div');
+    labelWrap.className = 'bnt-s-row-label';
+    labelWrap.innerHTML = `
+      <span>${labelHtml}</span>
+      <span class="bnt-s-row-desc">${row.desc || ''}</span>
     `;
+
+    if (iconHtml) el.insertAdjacentHTML('beforeend', iconHtml);
+    el.appendChild(labelWrap);
+    el.appendChild(buildControl(row));
+
     return el;
   }
 
@@ -375,79 +617,238 @@
 
   /* ══════════════════════════════════════════════════════════════
      PRESET UI
+     ──────────────────────────────────────────────────────────────
+     Логика:
+     · _activePreset = 'default' | 'my_settings' | 'preset_<ts>'
+     · 'default'     — всегда доступен, хранит defaultSettings(),
+                       выбор сбрасывает storage к дефолтам
+     · 'my_settings' — автоматически создаётся при первом изменении
+                       любого параметра; обновляется при каждом change
+     · пользовательские — создаются через попап "Save preset"
+     · крестик в списке удаляет пресет (кроме Default)
   ══════════════════════════════════════════════════════════════ */
 
-  function refreshPresetSelect() {
-    elPresetSel.innerHTML = '';
+  /* ── Popup helpers ─────────────────────────────────────────── */
+  let _popupResolve = null;
 
-    /* Default option */
-    const defOpt = document.createElement('option');
-    defOpt.value       = 'default';
-    defOpt.textContent = 'Default';
-    elPresetSel.appendChild(defOpt);
+  /** Открывает попап, возвращает Promise<string|null> */
+  function openPopup(title, defaultValue = '') {
+    ppTitle.textContent   = title;
+    ppInput.value         = defaultValue;
+    ppOverlay.setAttribute('aria-hidden', 'false');
+    ppOverlay.classList.add('visible');
+    setTimeout(() => { ppInput.focus(); ppInput.select(); }, 50);
+
+    return new Promise(resolve => {
+      _popupResolve = resolve;
+    });
+  }
+
+  function closePopup(value) {
+    ppOverlay.classList.remove('visible');
+    ppOverlay.setAttribute('aria-hidden', 'true');
+    if (_popupResolve) { _popupResolve(value ?? null); _popupResolve = null; }
+  }
+
+  ppOk.addEventListener('click', () => {
+    const v = ppInput.value.trim();
+    if (v) closePopup(v);
+    else ppInput.focus();
+  });
+  ppCancel.addEventListener('click', () => closePopup(null));
+  ppOverlay.addEventListener('mousedown', e => { if (e.target === ppOverlay) closePopup(null); });
+  ppInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { ppOk.click(); }
+    if (e.key === 'Escape') { closePopup(null); }
+  });
+
+  /* ── Refresh dropdown list ─────────────────────────────────── */
+  function refreshPresetUI() {
+    /* Имя активного пресета на кнопке */
+    const activeName = _activePreset === 'default'
+      ? 'Default'
+      : (_presets[_activePreset]?.name ?? 'Unknown');
+    elPresetBtnName.textContent = activeName;
+
+    /* Save кнопка: только если не Default */
+    const isDefault = _activePreset === 'default';
+    elSaveBtn.classList.toggle('bnt-s-btn-disabled', isDefault);
+    elSaveBtn.title = isDefault ? 'Select a preset to export' : 'Export active preset to file';
+
+    /* Список */
+    elPresetList.innerHTML = '';
+
+    /* Default */
+    const defItem = makePresetItem('default', 'Default', _activePreset === 'default');
+    elPresetList.appendChild(defItem);
 
     /* User presets */
     Object.entries(_presets).forEach(([id, p]) => {
-      const opt = document.createElement('option');
-      opt.value       = id;
-      opt.textContent = p.name;
-      elPresetSel.appendChild(opt);
+      elPresetList.appendChild(makePresetItem(id, p.name, _activePreset === id, p.imported));
     });
 
-    /* Add-new option */
-    const addOpt = document.createElement('option');
-    addOpt.value       = '__add__';
-    addOpt.textContent = '+ Save as new preset…';
-    elPresetSel.appendChild(addOpt);
-
-    elPresetSel.value = _activePreset in _presets ? _activePreset : 'default';
-    updateSaveBtn();
-  }
-
-  function updateSaveBtn() {
-    const isDefault = elPresetSel.value === 'default';
-    elSaveBtn.classList.toggle('bnt-s-btn-disabled', isDefault);
-    elSaveBtn.title = isDefault
-      ? 'Select or create a preset to save'
-      : 'Export current settings to file';
-  }
-
-  elPresetSel.addEventListener('change', async () => {
-    const val = elPresetSel.value;
-
-    if (val === '__add__') {
-      /* Prompt for preset name */
-      const name = prompt('Preset name:');
-      if (!name || !name.trim()) {
-        elPresetSel.value = _activePreset in _presets ? _activePreset : 'default';
-        return;
-      }
+    /* + New preset */
+    const addItem = document.createElement('div');
+    addItem.className = 'bnt-s-preset-item bnt-s-preset-add';
+    addItem.innerHTML = `
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Save current as…
+    `;
+    addItem.addEventListener('click', async () => {
+      closePresetList();
+      const name = await openPopup('Save preset', '');
+      if (!name) return;
       const id = 'preset_' + Date.now();
-      const currentSettings = window.BNT_STORAGE
-        ? window.BNT_STORAGE.getSettings()
-        : {};
-      _presets[id]  = { name: name.trim(), settings: { ...currentSettings } };
+      const currentSettings = window.BNT_STORAGE ? window.BNT_STORAGE.getSettings() : {};
+      _presets[id]  = { name, settings: { ...currentSettings } };
       _activePreset = id;
       await savePresets();
-      refreshPresetSelect();
-      return;
+      refreshPresetUI();
+    });
+    elPresetList.appendChild(addItem);
+  }
+
+  function makePresetItem(id, name, isActive, imported = false) {
+    const item = document.createElement('div');
+    item.className = 'bnt-s-preset-item' + (isActive ? ' active' : '');
+    item.dataset.id = id;
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'bnt-s-preset-item-name';
+    nameEl.textContent = name;
+    /* Иконка импорта рядом с именем */
+    if (imported) {
+      nameEl.insertAdjacentHTML('beforeend',
+        `<span class="bnt-preset-imported-ico" title="Imported preset">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </span>`
+      );
+    }
+    item.appendChild(nameEl);
+
+    /* Крестик (только не у Default) */
+    if (id !== 'default') {
+      const del = document.createElement('button');
+      del.className = 'bnt-s-preset-del';
+      del.title = 'Delete preset';
+      del.innerHTML = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      del.addEventListener('click', async e => {
+        e.stopPropagation();
+        delete _presets[id];
+        if (_activePreset === id) {
+          _activePreset = 'default';
+          await applyPreset('default');
+        }
+        await savePresets();
+        refreshPresetUI();
+      });
+      item.appendChild(del);
     }
 
-    _activePreset = val;
-    await savePresets();
-    updateSaveBtn();
+    /* Клик по строке = активировать */
+    nameEl.addEventListener('click', async () => {
+      closePresetList();
+      if (_activePreset === id) return;
+      _activePreset = id;
+      await savePresets();
+      await applyPreset(id);
+      refreshPresetUI();
+    });
+
+    return item;
+  }
+
+  /* ── Dropdown open/close ───────────────────────────────────── */
+  function openPresetList() {
+    refreshPresetUI();
+    elPresetList.hidden = false;
+    elPresetBtn.classList.add('open');
+  }
+  function closePresetList() {
+    elPresetList.hidden = true;
+    elPresetBtn.classList.remove('open');
+  }
+
+  elPresetBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    elPresetList.hidden ? openPresetList() : closePresetList();
+  });
+  document.addEventListener('click', e => {
+    if (!elPresetList.hidden && !elPresetList.contains(e.target) && e.target !== elPresetBtn) {
+      closePresetList();
+    }
   });
 
-  /* ── Rename preset on double-click ─────────────────────────── */
-  elPresetSel.addEventListener('dblclick', async () => {
-    const val = elPresetSel.value;
-    if (val === 'default' || val === '__add__') return;
-    const current = _presets[val]?.name || '';
-    const newName = prompt('Rename preset:', current);
-    if (!newName || !newName.trim()) return;
-    _presets[val].name = newName.trim();
+  /* ── Apply preset → записать в BNT_STORAGE и диспатчить события ── */
+
+  /* Флаг: пока applyPreset работает — игнорируем bnt:settings-changed,
+     чтобы переключение пресета не порождало автоматический "My settings" */
+  let _applyingPreset = false;
+
+  async function applyPreset(id) {
+    _applyingPreset = true;
+    try {
+      const settings = id === 'default'
+        ? defaultSettings()
+        : (_presets[id]?.settings ?? defaultSettings());
+
+      if (window.BNT_STORAGE) {
+        await window.BNT_STORAGE.updateSettings(settings);
+      }
+
+      /* Уведомляем подписчиков (bookmarks.js и др.) */
+      window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: settings }));
+
+      /* FIX 3: перерендериваем текущую категорию — контролы покажут новые значения */
+      renderCategory(_activeCategory);
+
+    } finally {
+      _applyingPreset = false;
+    }
+  }
+
+  /* ── Auto-create "My settings" on any settings change ─────────
+     Срабатывает только при изменении через контрол (слайдер и т.п.),
+     но НЕ при переключении пресета (_applyingPreset = true).
+
+     Логика:
+     · Если активен Default → создаём новый "My settings" пресет
+     · Если активен "My settings" → обновляем его настройки на месте
+     · Если активен любой другой именованный пресет → не трогаем его
+  ── */
+  const MY_SETTINGS_ID = 'my_settings';
+
+  async function onSettingsChanged(patch) {
+    if (_applyingPreset) return;   /* идёт переключение пресета — пропускаем */
+
+    const currentSettings = window.BNT_STORAGE ? window.BNT_STORAGE.getSettings() : {};
+    const merged = { ...currentSettings, ...patch };
+
+    if (_activePreset === 'default') {
+      /* Default → создаём новый "My settings #N" */
+      const existingCount = Object.values(_presets)
+        .filter(p => p.name.startsWith('My settings')).length;
+      const name = existingCount === 0 ? 'My settings' : `My settings #${existingCount + 1}`;
+      const id   = 'my_settings_' + Date.now();
+      _presets[id] = { name, settings: merged };
+      _activePreset = id;
+    } else if (_presets[_activePreset]) {
+      /* Любой существующий пресет (включая My settings и импортированные)
+         → обновляем его настройки на месте */
+      _presets[_activePreset].settings = merged;
+    }
+
     await savePresets();
-    refreshPresetSelect();
+    refreshPresetUI();
+  }
+
+  /* Слушаем событие change со слайдеров/контролов */
+  window.addEventListener('bnt:settings-changed', async e => {
+    if (e.detail) await onSettingsChanged(e.detail);
   });
 
   /* ══════════════════════════════════════════════════════════════
@@ -508,7 +909,9 @@
       const payload = JSON.parse(text);
 
       if (!payload.settings || typeof payload.settings !== 'object') {
-        alert('Invalid settings file.');
+        if (window.BNT_TOAST) {
+          window.BNT_TOAST.show({ title: 'Invalid settings file', type: 'error', duration: 4000 });
+        }
         return;
       }
 
@@ -519,18 +922,35 @@
 
       /* Optionally store as a new preset */
       const name = payload.presetName
-        ? payload.presetName + ' (imported)'
+        ? payload.presetName
         : 'Imported ' + new Date().toLocaleString();
 
       const id = 'preset_' + Date.now();
-      _presets[id]  = { name, settings: { ...payload.settings } };
+      _presets[id]  = { name, settings: { ...payload.settings }, imported: true };
       _activePreset = id;
       await savePresets();
-      refreshPresetSelect();
-      alert(`Settings imported as preset "${name}".`);
+      refreshPresetUI();
+      /* Применяем импортированные настройки на страницу */
+      window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: payload.settings }));
+
+      if (window.BNT_TOAST) {
+        window.BNT_TOAST.show({
+          title:   `Preset "${name}" imported`,
+          message: 'Settings applied and saved as a new preset',
+          type:    'success',
+          duration: 4000,
+        });
+      }
     } catch (err) {
       console.error('[BNT] Settings import failed:', err);
-      alert('Failed to read settings file. Make sure it is a valid JSON export.');
+      if (window.BNT_TOAST) {
+        window.BNT_TOAST.show({
+          title:   'Import failed',
+          message: 'Make sure it is a valid JSON export',
+          type:    'error',
+          duration: 5000,
+        });
+      }
     }
   });
 
@@ -558,7 +978,7 @@
   async function open(categoryId) {
     /* Load presets fresh each time overlay opens */
     await loadPresets();
-    refreshPresetSelect();
+    refreshPresetUI();
 
     /* Clear search */
     elSearch.value = '';
