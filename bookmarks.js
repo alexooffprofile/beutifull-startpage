@@ -106,12 +106,65 @@
     const d = e.detail;
     if (!d) return;
     if (d.panelWidthPct !== undefined) applyPanelWidth(d.panelWidthPct);
-    if (d.pinByDefault  !== undefined) setPin(d.pinByDefault);
+    /* pinByDefault only affects NEW tabs — do NOT change current tab's pin state */
     if (d.cardRadius    !== undefined)
       document.documentElement.style.setProperty('--bm-card-radius', d.cardRadius + 'px');
     if (d.closeDelay    !== undefined) CONFIG.CLOSE_DELAY_MS = d.closeDelay;
-    if (d.accentMain    !== undefined)
-      document.documentElement.style.setProperty('--accent-main', d.accentMain);
+    if (d.accentMain    !== undefined) {
+      const hex = d.accentMain;
+      const h   = hex.replace('#', '');
+      const r   = parseInt(h.substring(0, 2), 16);
+      const g   = parseInt(h.substring(2, 4), 16);
+      const b   = parseInt(h.substring(4, 6), 16);
+      document.documentElement.style.setProperty('--accent-main', hex);
+      document.documentElement.style.setProperty('--accent-main-glow', `rgba(${r},${g},${b},0.18)`);
+      document.documentElement.style.setProperty('--accent-main-glow-sm', `rgba(${r},${g},${b},0.12)`);
+    }
+    if (d.accentSearch !== undefined) {
+      const hex = d.accentSearch;
+      const h = hex.replace('#','');
+      const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+      document.documentElement.style.setProperty('--accent-search', hex);
+      document.documentElement.style.setProperty('--accent-search-glow', `rgba(${r},${g},${b},0.14)`);
+    }
+    if (d.accentCmd !== undefined) {
+      const hex = d.accentCmd;
+      const h = hex.replace('#','');
+      const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+      document.documentElement.style.setProperty('--accent-cmd', hex);
+      document.documentElement.style.setProperty('--accent-cmd-glow', `rgba(${r},${g},${b},0.14)`);
+    }
+    if (d.autoPanelBg !== undefined || d.panelBg !== undefined || d.accentMain !== undefined) {
+      /* Re-derive surface palette when any related setting changes */
+      const S = window.BNT_STORAGE;
+      const settings = S ? S.getSettings() : {};
+      const autoPanelBg = d.autoPanelBg ?? settings.autoPanelBg ?? true;
+      const root = document.documentElement;
+      /* accent → panelBg (mix 2.5%) → full surface hierarchy */
+      const _applyBg = (panelHex) => {
+        const hx = panelHex.replace('#','');
+        const r = parseInt(hx.substring(0,2),16), g = parseInt(hx.substring(2,4),16), bl = parseInt(hx.substring(4,6),16);
+        const clamp = v => Math.max(0, Math.min(255, v));
+        const rgb = (dr, dg, db) => `rgb(${clamp(r+dr)},${clamp(g+dg)},${clamp(b+db)})`.replace('b',bl);
+        root.style.setProperty('--panel-bg', panelHex);
+        root.style.setProperty('--bg',       `rgb(${clamp(r-16)},${clamp(g-17)},${clamp(bl-22)})`);
+        root.style.setProperty('--surface',  `rgb(${clamp(r-8)},${clamp(g-8)},${clamp(bl-10)})`);
+        root.style.setProperty('--surface2', panelHex);
+        root.style.setProperty('--surface3', `rgb(${clamp(r+7)},${clamp(g+7)},${clamp(bl+7)})`);
+      };
+      if (autoPanelBg) {
+        const accent = d.accentMain ?? settings.accentMain ?? '#7eff84';
+        const hx = accent.replace('#','');
+        const r = parseInt(hx.substring(0,2),16), g = parseInt(hx.substring(2,4),16), bl = parseInt(hx.substring(4,6),16);
+        const mix = 0.012;
+        const t = (base, ch) => Math.round(base + (ch - base) * mix);
+        const to2 = n => n.toString(16).padStart(2,'0');
+        const panelHex = '#' + to2(t(30,r)) + to2(t(32,g)) + to2(t(41,bl));
+        _applyBg(panelHex);
+      } else if (d.panelBg) {
+        _applyBg(d.panelBg);
+      }
+    }
   });
 
   /* ══════════════════════════════════════════════════════════════
@@ -1622,7 +1675,11 @@
     applyPanelWidth(settings.panelWidthPct ?? 32);
 
     /* Pin by default */
-    if (settings.pinByDefault) setPin(true);
+    /* Pin by default — also open the panel so it's visible from the start */
+    if (settings.pinByDefault) {
+      setPin(true);
+      panel.classList.remove('bm-collapsed');
+    }
 
     /* Card corner radius */
     if (settings.cardRadius !== undefined) {
@@ -1631,6 +1688,18 @@
 
     /* Close delay */
     CONFIG.CLOSE_DELAY_MS = settings.closeDelay ?? CONFIG.CLOSE_DELAY_MS;
+
+    /* Accent color — apply on every new tab load */
+    if (settings.accentMain) {
+      const hex = settings.accentMain;
+      const h   = hex.replace('#', '');
+      const r   = parseInt(h.substring(0, 2), 16);
+      const g   = parseInt(h.substring(2, 4), 16);
+      const b   = parseInt(h.substring(4, 6), 16);
+      document.documentElement.style.setProperty('--accent-main', hex);
+      document.documentElement.style.setProperty('--accent-main-glow', `rgba(${r},${g},${b},0.18)`);
+      document.documentElement.style.setProperty('--accent-main-glow-sm', `rgba(${r},${g},${b},0.12)`);
+    }
 
     groupMode = settings.groupMode || 'none';
     groupBtns.querySelectorAll('.bm-group-btn').forEach(b => {

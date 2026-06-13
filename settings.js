@@ -49,7 +49,28 @@
      * Основной акцентный цвет (hex). Применяется к --accent-main в :root.
      * Используется для тегов, кнопок, слайдеров, рамок фокуса.
      */
-    ACCENT_MAIN_DEFAULT : '#7eff84',
+    ACCENT_MAIN_DEFAULT   : '#7eff84',
+
+    /**
+     * Акцент строки поиска (hex). Применяется к --accent-search.
+     */
+    ACCENT_SEARCH_DEFAULT : '#7b93ff',
+
+    /**
+     * Акцент командной палитры (hex). Применяется к --accent-cmd.
+     */
+    ACCENT_CMD_DEFAULT    : '#ff7eb3',
+
+    /**
+     * Автоматически адаптировать background панелей под акцентный цвет.
+     * true = panel bg следует за accentMain (авто), false = ручной выбор.
+     */
+    AUTO_PANEL_BG_DEFAULT : false,
+
+    /**
+     * Цвет background панелей (hex). Используется только при AUTO_PANEL_BG = false.
+     */
+    PANEL_BG_DEFAULT      : '#16181f',
 
     /**
      * Радиус скругления карточек закладок (px).
@@ -80,6 +101,10 @@
       panelWidthPct  : SETTINGS_CONFIG.PANEL_WIDTH_DEFAULT,
       pinByDefault   : SETTINGS_CONFIG.PIN_DEFAULT,
       accentMain     : SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT,
+      accentSearch   : SETTINGS_CONFIG.ACCENT_SEARCH_DEFAULT,
+      accentCmd      : SETTINGS_CONFIG.ACCENT_CMD_DEFAULT,
+      autoPanelBg    : SETTINGS_CONFIG.AUTO_PANEL_BG_DEFAULT,
+      panelBg        : SETTINGS_CONFIG.PANEL_BG_DEFAULT,
       cardRadius     : SETTINGS_CONFIG.CARD_RADIUS_DEFAULT,
       closeDelay     : SETTINGS_CONFIG.CLOSE_DELAY_DEFAULT,
     };
@@ -111,6 +136,19 @@
   ══════════════════════════════════════════════════════════════ */
   const CATEGORIES = [
     {
+      id:    'wallpaper',
+      label: 'Wallpaper',
+      icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+      sections: [
+        {
+          title: 'Background Type',
+          rows: [
+            { icon: 'image', label: 'Wallpaper', desc: 'Main page background' },
+          ],
+        },
+      ],
+    },
+    {
       id:    'general',
       label: 'General',
       icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>`,
@@ -139,7 +177,7 @@
     {
       id:    'themes',
       label: 'Themes & Colors',
-      icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M8 12a4 4 0 0 1 8 0"/></svg>`,
+      icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 1.657-1.343 3-3 3h-1.5a1.5 1.5 0 0 0 0 3H18"/><circle cx="8.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="13.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="14.5" r="1.5" fill="currentColor" stroke="none"/></svg>`,
       sections: [
         {
           title: 'Accent Colors',
@@ -152,6 +190,7 @@
         {
           title: 'Background',
           rows: [
+            { icon: 'eye',     label: 'Adaptive panel tint', desc: 'Automatically tint panel background to match the main accent' },
             { icon: 'brush',   label: 'Background color', desc: 'Base page background color' },
             { icon: 'image',   label: 'Background image', desc: 'Custom wallpaper — URL or local file' },
           ],
@@ -226,6 +265,8 @@
   ══════════════════════════════════════════════════════════════ */
   let _presets      = {};   // { [id]: { name: string, settings: object } }
   let _activePreset = 'default';
+  let _panelBgPickerBtn   = null;  // ref to color btn in panel bg row
+  let _panelBgPickerInput = null;  // ref to <input type=color> in panel bg row
 
   async function loadPresets() {
     const data = await csGet([CS_PRESETS, CS_ACTIVE_PRESET]);
@@ -407,8 +448,170 @@
     return label;
   }
 
+  /**
+   * Builds TWO rows for "Auto panel bg" toggle + "Panel bg color" picker.
+   * Returns a DocumentFragment containing both .bnt-s-row elements.
+   */
+  function buildAutoPanelBgRows() {
+    const S = window.BNT_STORAGE;
+    const settings = S ? S.getSettings() : {};
+    const autoOn = settings.autoPanelBg ?? SETTINGS_CONFIG.AUTO_PANEL_BG_DEFAULT;
+    const panelBgVal = settings.panelBg ?? SETTINGS_CONFIG.PANEL_BG_DEFAULT;
+
+    const frag = document.createDocumentFragment();
+
+    /* ── Row 1: Toggle ── */
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'bnt-s-row';
+    toggleRow.innerHTML = `
+      <span class="bnt-s-row-ico">${ICO['eye']}</span>
+      <div class="bnt-s-row-label">
+        <span>Adaptive panel tint</span>
+        <span class="bnt-s-row-desc">Automatically tint panel background to match the main accent</span>
+      </div>
+    `;
+
+    /* We need references to colorRow / colorPickerInput before toggle callback — declare vars */
+    let colorRow, colorBtn, colorPickerInput;
+
+    const toggleCtrl = buildToggle('autoPanelBg', SETTINGS_CONFIG.AUTO_PANEL_BG_DEFAULT, v => {
+      colorRow.classList.toggle('bnt-s-row--disabled', v);
+      colorPickerInput.disabled = v;
+      if (v) {
+        const accent = (S ? S.getSettings().accentMain : null) ?? SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT;
+        const derived = derivePanelBg(accent);
+        applyPanelBg(derived);
+        colorBtn.style.background = derived;
+      }
+    });
+    toggleRow.appendChild(toggleCtrl);
+    frag.appendChild(toggleRow);
+
+    /* ── Row 2: Color picker (locked when auto is on) ── */
+    colorRow = document.createElement('div');
+    colorRow.className = 'bnt-s-row' + (autoOn ? ' bnt-s-row--disabled' : '');
+    colorRow.innerHTML = `
+      <span class="bnt-s-row-ico">${ICO['brush']}</span>
+      <div class="bnt-s-row-label">
+        <span>Panel background</span>
+        <span class="bnt-s-row-desc">Background color of panels, cards and dropdowns</span>
+      </div>
+    `;
+
+    colorBtn = document.createElement('div');
+    colorBtn.className = 'bnt-s-color-btn bnt-s-control';
+    const previewColor = autoOn
+      ? derivePanelBg((S ? S.getSettings().accentMain : null) ?? SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT)
+      : panelBgVal;
+    colorBtn.style.background = previewColor;
+    colorBtn.innerHTML = `
+      <span class="bnt-s-color-btn-ico">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+      </span>
+      <input type="color" value="${panelBgVal}" ${autoOn ? 'disabled' : ''}>
+    `;
+    colorPickerInput = colorBtn.querySelector('input[type="color"]');
+
+    colorPickerInput.addEventListener('input', () => {
+      if (colorPickerInput.disabled) return;
+      colorBtn.style.background = colorPickerInput.value;
+      applyPanelBg(colorPickerInput.value);
+    });
+    colorPickerInput.addEventListener('change', async () => {
+      if (colorPickerInput.disabled) return;
+      const v = colorPickerInput.value;
+      colorBtn.style.background = v;
+      applyPanelBg(v);
+      if (S) await S.updateSettings({ panelBg: v });
+      window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { panelBg: v } }));
+    });
+
+    colorRow.appendChild(colorBtn);
+    frag.appendChild(colorRow);
+
+    /* Store refs so global onSettingsChanged can update picker when accent changes */
+    _panelBgPickerBtn   = colorBtn;
+    _panelBgPickerInput = colorPickerInput;
+
+    return frag;
+  }
+
+  /** Convert hex color → rgba glow string (alpha 0.18) */
+  function hexToGlow(hex, alpha = 0.18) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  /** Apply accent color + its derived glow to CSS variables */
+  function applyAccentMain(hex) {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-main', hex);
+    root.style.setProperty('--accent-main-glow', hexToGlow(hex, 0.18));
+    root.style.setProperty('--accent-main-glow-sm', hexToGlow(hex, 0.12));
+    /* If auto panel bg is on — update panel bg too */
+    const S = window.BNT_STORAGE;
+    const autoPanelBg = S ? (S.getSettings().autoPanelBg ?? SETTINGS_CONFIG.AUTO_PANEL_BG_DEFAULT) : SETTINGS_CONFIG.AUTO_PANEL_BG_DEFAULT;
+    if (autoPanelBg) applyPanelBg(derivePanelBg(hex));
+  }
+
+  function applyAccentSearch(hex) {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-search', hex);
+    root.style.setProperty('--accent-search-glow', hexToGlow(hex, 0.14));
+  }
+
+  function applyAccentCmd(hex) {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-cmd', hex);
+    root.style.setProperty('--accent-cmd-glow', hexToGlow(hex, 0.14));
+  }
+
+  /**
+   * accent → panelBg hex (--surface2 level, mix ~2.5%)
+   * Produces a colour close to the base but with a breath of accent hue.
+   */
+  function derivePanelBg(accentHex) {
+    const h = accentHex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    const mix = 0.012;
+    const t = (base, ch) => Math.round(base + (ch - base) * mix);
+    // Returns hex string so color picker can show it
+    const to2 = n => n.toString(16).padStart(2, '0');
+    return '#' + to2(t(30,r)) + to2(t(32,g)) + to2(t(41,b));
+  }
+
+  /**
+   * panelBg hex → full surface palette.
+   * All other levels are derived relative to panelBg with fixed deltas,
+   * so the whole UI shifts together whether the colour came from accent
+   * adaptation or from the user's manual pick.
+   * panelBg is treated as --surface2 (mid level).
+   * Deltas from original: bg=-16/-17/-22, s1=-8/-8/-10, s2=0, s3=+7/+7/+7
+   */
+  function applyPanelBg(panelBgHex) {
+    const h = panelBgHex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    const clamp = v => Math.max(0, Math.min(255, v));
+    const rgb = (dr, dg, db) => `rgb(${clamp(r+dr)},${clamp(g+dg)},${clamp(b+db)})`;
+    const root = document.documentElement;
+    root.style.setProperty('--panel-bg', panelBgHex);
+    root.style.setProperty('--bg',       rgb(-16, -17, -22));
+    root.style.setProperty('--surface',  rgb( -8,  -8, -10));
+    root.style.setProperty('--surface2', panelBgHex);
+    root.style.setProperty('--surface3', rgb(  7,   7,   7));
+  }
+
   /** Универсальный color-picker с кнопкой-кружком */
-  function buildColorPicker(storageKey, defaultVal, cssVar) {
+  function buildColorPicker(storageKey, defaultVal, cssVar, applyFn = null) {
     const S = window.BNT_STORAGE;
     const current = S ? (S.getSettings()[storageKey] ?? defaultVal) : defaultVal;
 
@@ -428,14 +631,22 @@
     /* Live preview */
     input.addEventListener('input', () => {
       btn.style.background = input.value;
-      if (cssVar) document.documentElement.style.setProperty(cssVar, input.value);
+      if (applyFn) {
+        applyFn(input.value);
+      } else if (cssVar) {
+        document.documentElement.style.setProperty(cssVar, input.value);
+      }
     });
 
     /* Persist on close */
     input.addEventListener('change', async () => {
       const v = input.value;
       btn.style.background = v;
-      if (cssVar) document.documentElement.style.setProperty(cssVar, v);
+      if (applyFn) {
+        applyFn(v);
+      } else if (cssVar) {
+        document.documentElement.style.setProperty(cssVar, v);
+      }
       if (S) await S.updateSettings({ [storageKey]: v });
       window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { [storageKey]: v } }));
     });
@@ -470,8 +681,321 @@
     return wrap;
   }
 
+  /* ══════════════════════════════════════════════════════════════
+     WALLPAPER CARD  (Шаг 1 — UI-only заглушки)
+  ══════════════════════════════════════════════════════════════ */
+  const WALLPAPER_TYPES = [
+    { id: 'solid',         label: 'Solid Color' },
+    { id: 'linear',        label: 'Linear Gradient' },
+    { id: 'radial-points', label: 'Radial Points' },
+    { id: 'image',         label: 'Static Image' },
+    { id: 'video',         label: 'Video / GIF' },
+    { id: 'app',           label: 'App / Widget' },
+  ];
+
+  function buildWallpaperCard() {
+    const S = window.BNT_STORAGE;
+    const currentType = S ? (S.getSettings().wallpaperType ?? 'radial-points') : 'radial-points';
+
+    const card = document.createElement('div');
+    card.className = 'bnt-wallpaper-card bnt-s-control';
+
+    card.innerHTML = `
+      <div class="bnt-wc-head">
+        <span class="bnt-wc-title">Wallpaper</span>
+        <div class="bnt-wc-type-dropdown-wrap">
+          <button class="bnt-wc-type-btn" type="button">
+            <span class="bnt-wc-type-btn-name"></span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="bnt-wc-type-list" hidden></div>
+        </div>
+      </div>
+      <div class="bnt-wc-preview"></div>
+      <div class="bnt-wc-controls"></div>
+    `;
+
+    const typeBtn   = card.querySelector('.bnt-wc-type-btn');
+    const typeName  = card.querySelector('.bnt-wc-type-btn-name');
+    const typeList  = card.querySelector('.bnt-wc-type-list');
+    const preview   = card.querySelector('.bnt-wc-preview');
+    const controls  = card.querySelector('.bnt-wc-controls');
+
+    function setType(typeId) {
+      const t = WALLPAPER_TYPES.find(x => x.id === typeId) || WALLPAPER_TYPES[2];
+      typeName.textContent = t.label;
+      renderPreview(typeId, preview);
+      renderControls(typeId, controls);
+    }
+
+    function renderTypeList() {
+      typeList.innerHTML = '';
+      WALLPAPER_TYPES.forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'bnt-wc-type-item' + (t.id === currentType ? ' active' : '');
+        item.textContent = t.label;
+        if (t.id === 'app') {
+          item.classList.add('bnt-wc-type-soon');
+          item.insertAdjacentHTML('beforeend', '<span class="bnt-wc-soon-badge">Soon</span>');
+        }
+        item.addEventListener('click', async () => {
+          closeTypeList();
+          if (t.id === 'app') {
+            openAppWidgetModal();
+            return;
+          }
+          typeList.querySelectorAll('.bnt-wc-type-item').forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+          setType(t.id);
+          if (S) await S.updateSettings({ wallpaperType: t.id });
+          window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { wallpaperType: t.id } }));
+        });
+        typeList.appendChild(item);
+      });
+    }
+
+    function closeTypeList() {
+      typeList.hidden = true;
+      document.removeEventListener('mousedown', onOutsideClick);
+    }
+    function onOutsideClick(e) {
+      if (!card.contains(e.target)) closeTypeList();
+    }
+    typeBtn.addEventListener('click', () => {
+      if (typeList.hidden) {
+        renderTypeList();
+        typeList.hidden = false;
+        document.addEventListener('mousedown', onOutsideClick);
+      } else {
+        closeTypeList();
+      }
+    });
+
+    renderTypeList();
+    setType(currentType);
+
+    return card;
+  }
+
+  /** Превью в карточке — Шаг 1: статичная заглушка по типу */
+  function renderPreview(typeId, container) {
+    container.innerHTML = '';
+    const inner = document.createElement('div');
+    inner.className = 'bnt-wc-preview-inner bnt-wc-preview-' + typeId;
+    if (typeId === 'image' || typeId === 'video') {
+      inner.innerHTML = `<span class="bnt-wc-preview-placeholder">No file selected</span>`;
+    }
+    container.appendChild(inner);
+  }
+
+  /** Панель настроек выбранного типа — Шаг 1: DOM-заглушки без обработчиков */
+  function renderControls(typeId, container) {
+    container.innerHTML = '';
+    switch (typeId) {
+      case 'solid':         container.appendChild(buildWallpaperControls_solid()); break;
+      case 'linear':        container.appendChild(buildWallpaperControls_linear()); break;
+      case 'radial-points': container.appendChild(buildWallpaperControls_radial()); break;
+      case 'image':         container.appendChild(buildWallpaperControls_image()); break;
+      case 'video':         container.appendChild(buildWallpaperControls_video()); break;
+      default: break;
+    }
+  }
+
+  function buildWallpaperControls_solid() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wc-panel bnt-wc-panel-solid';
+    wrap.innerHTML = `
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Color</span>
+        <div class="bnt-s-color-btn bnt-s-control bnt-wc-color-placeholder" style="background:#0e0f13">
+          <input type="color" value="#0e0f13">
+        </div>
+      </div>
+      ${buildOverlaySectionHtml()}
+    `;
+    return wrap;
+  }
+
+  function buildWallpaperControls_linear() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wc-panel bnt-wc-panel-linear';
+    wrap.innerHTML = `
+      <div class="bnt-wc-gradient-bar">
+        <div class="bnt-wc-gradient-stop" style="left:0%"></div>
+        <div class="bnt-wc-gradient-stop" style="left:100%"></div>
+        <button class="bnt-wc-gradient-add" type="button" title="Add stop">+</button>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Angle</span>
+        <div class="bnt-s-control bnt-s-slider-wrap">
+          <input type="range" min="0" max="360" step="1" value="135">
+          <span class="bnt-s-slider-val">135°</span>
+        </div>
+      </div>
+      ${buildOverlaySectionHtml()}
+    `;
+    return wrap;
+  }
+
+  function buildWallpaperControls_radial() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wc-panel bnt-wc-panel-radial';
+    wrap.innerHTML = `
+      <div class="bnt-wc-radial-area">
+        <div class="bnt-wc-radial-point" style="left:15%;top:8%;background:#7b93ff"></div>
+        <div class="bnt-wc-radial-point" style="left:85%;top:85%;background:#ff7eb3"></div>
+        <button class="bnt-wc-radial-add" type="button" title="Add point">+</button>
+      </div>
+      ${buildOverlaySectionHtml()}
+    `;
+    return wrap;
+  }
+
+  function buildWallpaperControls_image() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wc-panel bnt-wc-panel-image';
+    wrap.innerHTML = `
+      <div class="bnt-wc-field-row">
+        <button class="bnt-wc-btn" type="button">Upload file</button>
+        <input class="bnt-wc-input" type="text" placeholder="Image URL">
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Fit</span>
+        <div class="bnt-wc-pill-group">
+          <button class="bnt-wc-pill active" type="button">Cover</button>
+          <button class="bnt-wc-pill" type="button">Contain</button>
+          <button class="bnt-wc-pill" type="button">Fill</button>
+          <button class="bnt-wc-pill" type="button">None</button>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Scale</span>
+        <div class="bnt-s-control bnt-s-slider-wrap">
+          <input type="range" min="50" max="200" step="1" value="100">
+          <span class="bnt-s-slider-val">100%</span>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">X offset</span>
+        <div class="bnt-s-control bnt-s-slider-wrap">
+          <input type="range" min="-100" max="100" step="1" value="0">
+          <span class="bnt-s-slider-val">0%</span>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Y offset</span>
+        <div class="bnt-s-control bnt-s-slider-wrap">
+          <input type="range" min="-100" max="100" step="1" value="0">
+          <span class="bnt-s-slider-val">0%</span>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Filter</span>
+        <div class="bnt-wc-pill-group">
+          <button class="bnt-wc-pill active" type="button">None</button>
+          <button class="bnt-wc-pill" type="button">B&amp;W</button>
+          <button class="bnt-wc-pill" type="button">Sepia</button>
+          <button class="bnt-wc-pill" type="button">Invert</button>
+          <button class="bnt-wc-pill" type="button">Warm</button>
+          <button class="bnt-wc-pill" type="button">Cool</button>
+        </div>
+      </div>
+    `;
+    return wrap;
+  }
+
+  function buildWallpaperControls_video() {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wc-panel bnt-wc-panel-video';
+    wrap.innerHTML = `
+      <div class="bnt-wc-field-row">
+        <button class="bnt-wc-btn" type="button">Upload file</button>
+        <input class="bnt-wc-input" type="text" placeholder="Video / GIF URL">
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Trim</span>
+        <div class="bnt-wc-trim-track">
+          <div class="bnt-wc-trim-handle bnt-wc-trim-start"></div>
+          <div class="bnt-wc-trim-handle bnt-wc-trim-end"></div>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <label class="bnt-wc-checkbox"><input type="checkbox" checked disabled> Loop</label>
+      </div>
+      <div class="bnt-wc-field-row bnt-wc-field-col">
+        <span class="bnt-wc-field-label">Audio</span>
+        <div class="bnt-wc-pill-group">
+          <button class="bnt-wc-pill active" type="button">From video</button>
+          <button class="bnt-wc-pill" type="button">Upload file</button>
+          <button class="bnt-wc-pill" type="button">URL</button>
+          <button class="bnt-wc-pill" type="button">No audio</button>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Volume</span>
+        <div class="bnt-s-control bnt-s-slider-wrap">
+          <input type="range" min="0" max="100" step="1" value="50">
+          <span class="bnt-s-slider-val">50%</span>
+        </div>
+      </div>
+      <div class="bnt-wc-field-row">
+        <span class="bnt-wc-field-label">Speed</span>
+        <div class="bnt-s-control bnt-s-slider-wrap">
+          <input type="range" min="0.25" max="2" step="0.05" value="1">
+          <span class="bnt-s-slider-val">1x</span>
+        </div>
+      </div>
+    `;
+    return wrap;
+  }
+
+  /** Overlay (Blur/Noise/Pattern) — общий HTML-фрагмент для Solid/Linear/Radial */
+  function buildOverlaySectionHtml() {
+    return `
+      <div class="bnt-wc-overlay-section">
+        <div class="bnt-wc-field-row">
+          <span class="bnt-wc-field-label">Overlay</span>
+          <div class="bnt-wc-pill-group">
+            <button class="bnt-wc-pill active" type="button">None</button>
+            <button class="bnt-wc-pill" type="button">Blur</button>
+            <button class="bnt-wc-pill" type="button">Noise</button>
+            <button class="bnt-wc-pill" type="button">Pattern</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Модальная заглушка App/Widget */
+  function openAppWidgetModal() {
+    let modal = document.getElementById('bnt-wc-appwidget-modal');
+    if (modal) { modal.hidden = false; return; }
+
+    modal = document.createElement('div');
+    modal.id = 'bnt-wc-appwidget-modal';
+    modal.innerHTML = `
+      <div class="bnt-wc-modal-card">
+        <div class="bnt-wc-modal-ico">🔮</div>
+        <div class="bnt-wc-modal-title">App / Widget</div>
+        <div class="bnt-wc-modal-sub">Coming soon</div>
+        <p class="bnt-wc-modal-text">This mode will let you embed live widgets or web apps as your background.</p>
+        <button class="bnt-wc-modal-ok" type="button">Got it</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    function close() { modal.hidden = true; }
+    modal.querySelector('.bnt-wc-modal-ok').addEventListener('click', close);
+    modal.addEventListener('mousedown', e => { if (e.target === modal) close(); });
+  }
+
   /* ── Build the control element for a settings row ── */
   function buildControl(row) {
+    /* ── Wallpaper ── */
+    if (row.label === 'Wallpaper') {
+      return buildWallpaperCard();
+    }
+
     /* ── Bookmarks Panel ── */
     if (row.label === 'Panel width') {
       const { PANEL_WIDTH_MIN_VW, PANEL_WIDTH_MAX_VW, PANEL_WIDTH_DEFAULT } = SETTINGS_CONFIG;
@@ -496,7 +1020,20 @@
 
     /* ── Themes & Colors ── */
     if (row.label === 'Main accent') {
-      return buildColorPicker('accentMain', SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT, '--accent-main');
+      return buildColorPicker('accentMain', SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT, '--accent-main', applyAccentMain);
+    }
+
+    if (row.label === 'Search accent') {
+      return buildColorPicker('accentSearch', SETTINGS_CONFIG.ACCENT_SEARCH_DEFAULT, '--accent-search', applyAccentSearch);
+    }
+
+    if (row.label === 'Command accent') {
+      return buildColorPicker('accentCmd', SETTINGS_CONFIG.ACCENT_CMD_DEFAULT, '--accent-cmd', applyAccentCmd);
+    }
+
+    /* Special: this label triggers a 2-row fragment (toggle + color picker) */
+    if (row.label === 'Adaptive panel tint') {
+      return buildAutoPanelBgRows();
     }
 
     /* Default — placeholder for rows not yet implemented */
@@ -507,6 +1044,15 @@
   }
 
   function buildRow(row, highlight = '') {
+    /* Special case: some labels return a DocumentFragment of multiple rows */
+    const ctrl = buildControl(row);
+    if (ctrl instanceof DocumentFragment) return ctrl;
+
+    /* Special case: wide standalone card (e.g. Wallpaper) — no row wrapper */
+    if (ctrl.classList && ctrl.classList.contains('bnt-wallpaper-card')) {
+      return ctrl;
+    }
+
     const el = document.createElement('div');
     el.className = 'bnt-s-row';
 
@@ -524,7 +1070,7 @@
 
     if (iconHtml) el.insertAdjacentHTML('beforeend', iconHtml);
     el.appendChild(labelWrap);
-    el.appendChild(buildControl(row));
+    el.appendChild(ctrl);
 
     return el;
   }
@@ -562,7 +1108,7 @@
       titleEl.textContent = sec.title;
       secEl.appendChild(titleEl);
 
-      sec.rows.forEach(row => secEl.appendChild(buildRow(row)));
+      sec.rows.forEach(row => secEl.append(buildRow(row)));
       elCategoryView.appendChild(secEl);
     });
   }
@@ -607,7 +1153,7 @@
       catLabel.textContent = cat.label;
       elSearchRes.appendChild(catLabel);
 
-      matchRows.forEach(row => elSearchRes.appendChild(buildRow(row, q)));
+      matchRows.forEach(row => elSearchRes.append(buildRow(row, q)));
     });
 
     elSearchRes.hidden  = false;
@@ -828,6 +1374,16 @@
     const currentSettings = window.BNT_STORAGE ? window.BNT_STORAGE.getSettings() : {};
     const merged = { ...currentSettings, ...patch };
 
+    /* If accent changed and auto panel bg is on — update picker preview */
+    if (patch.accentMain && _panelBgPickerBtn?.isConnected && _panelBgPickerInput?.isConnected) {
+      const isAuto = merged.autoPanelBg ?? SETTINGS_CONFIG.AUTO_PANEL_BG_DEFAULT;
+      if (isAuto) {
+        const newColor = derivePanelBg(patch.accentMain);
+        _panelBgPickerBtn.style.background = newColor;
+        _panelBgPickerInput.value = newColor;
+      }
+    }
+
     if (_activePreset === 'default') {
       /* Default → создаём новый "My settings #N" */
       const existingCount = Object.values(_presets)
@@ -1034,4 +1590,83 @@
      EXPOSE API
   ══════════════════════════════════════════════════════════════ */
   window.BNT_SETTINGS = { open, close, CATEGORIES };
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   EARLY ACCENT APPLY
+   Применяем сохранённый акцентный цвет сразу при загрузке страницы,
+   до того как пользователь что-либо открыл. Запускается один раз.
+   hexToGlow продублирована здесь т.к. она внутри IIFE выше.
+══════════════════════════════════════════════════════════════ */
+(async () => {
+  function _hexToGlow(hex, alpha) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  /* accent hex → panelBg hex (mix 2.5% into surface2 base) */
+  function _derivePanelBg(accentHex) {
+    const h = accentHex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    const mix = 0.012;
+    const t = (base, ch) => Math.round(base + (ch - base) * mix);
+    const to2 = n => n.toString(16).padStart(2, '0');
+    return '#' + to2(t(30,r)) + to2(t(32,g)) + to2(t(41,b));
+  }
+
+  /* panelBg hex → apply full surface hierarchy */
+  function _applyPanelSurfaces(root, panelBgHex) {
+    const h = panelBgHex.replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    const clamp = v => Math.max(0, Math.min(255, v));
+    const rgb = (dr, dg, db) => `rgb(${clamp(r+dr)},${clamp(g+dg)},${clamp(b+db)})`;
+    root.style.setProperty('--panel-bg', panelBgHex);
+    root.style.setProperty('--bg',       rgb(-16, -17, -22));
+    root.style.setProperty('--surface',  rgb( -8,  -8, -10));
+    root.style.setProperty('--surface2', panelBgHex);
+    root.style.setProperty('--surface3', rgb(  7,   7,   7));
+  }
+
+  try {
+    await window.BNT_STORAGE_READY;
+    const s    = window.BNT_STORAGE?.getSettings() ?? {};
+    const root = document.documentElement;
+
+    const accent = s.accentMain;
+    if (accent && accent !== '#7eff84') {
+      root.style.setProperty('--accent-main',         accent);
+      root.style.setProperty('--accent-main-glow',    _hexToGlow(accent, 0.18));
+      root.style.setProperty('--accent-main-glow-sm', _hexToGlow(accent, 0.12));
+    }
+
+    const accentSearch = s.accentSearch;
+    if (accentSearch && accentSearch !== '#7b93ff') {
+      root.style.setProperty('--accent-search',      accentSearch);
+      root.style.setProperty('--accent-search-glow', _hexToGlow(accentSearch, 0.14));
+    }
+
+    const accentCmd = s.accentCmd;
+    if (accentCmd && accentCmd !== '#ff7eb3') {
+      root.style.setProperty('--accent-cmd',      accentCmd);
+      root.style.setProperty('--accent-cmd-glow', _hexToGlow(accentCmd, 0.14));
+    }
+
+    /* Panel bg */
+    const autoPanelBg = s.autoPanelBg ?? false;
+    if (autoPanelBg) {
+      const base = accent || '#7eff84';
+      _applyPanelSurfaces(root, _derivePanelBg(base));
+    } else if (s.panelBg) {
+      _applyPanelSurfaces(root, s.panelBg);
+    }
+  } catch (e) {
+    /* storage not ready — CSS defaults are fine */
+  }
 })();
