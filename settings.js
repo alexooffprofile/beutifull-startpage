@@ -141,7 +141,6 @@
       icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
       sections: [
         {
-          title: 'Background Type',
           rows: [
             { icon: 'image', label: 'Wallpaper', desc: 'Main page background' },
           ],
@@ -681,10 +680,12 @@
     return wrap;
   }
 
+  /* ── Build the control element for a settings row ── */
   /* ══════════════════════════════════════════════════════════════
-     WALLPAPER CARD  (Шаг 1 — UI-only заглушки)
+     WALLPAPER SECTION
   ══════════════════════════════════════════════════════════════ */
-  const WALLPAPER_TYPES = [
+
+  const WP_TYPES = [
     { id: 'solid',         label: 'Solid Color' },
     { id: 'linear',        label: 'Linear Gradient' },
     { id: 'radial-points', label: 'Radial Points' },
@@ -693,307 +694,756 @@
     { id: 'app',           label: 'App / Widget' },
   ];
 
-  function buildWallpaperCard() {
-    const S = window.BNT_STORAGE;
-    const currentType = S ? (S.getSettings().wallpaperType ?? 'radial-points') : 'radial-points';
+  let _wpType     = 'radial-points';
+  let _wpViewMode = 'customization'; /* 'customization' | 'zones' */
+  let _radialBgColor = '#0e0f13';
+  const _radialPoints = [
+    { x: 15, y: 22, color: '#7b93ff', radius: 55 },
+    { x: 82, y: 74, color: '#ff7eb3', radius: 42 },
+  ];
 
-    const card = document.createElement('div');
-    card.className = 'bnt-wallpaper-card bnt-s-control';
+  /* Helper: make a standard bnt-s-row element */
+  function wpMakeRow(iconKey, label, desc, ctrl) {
+    const el = document.createElement('div');
+    el.className = 'bnt-s-row';
+    const ico = ICO[iconKey] ? `<span class="bnt-s-row-ico">${ICO[iconKey]}</span>` : '';
+    const labelWrap = document.createElement('div');
+    labelWrap.className = 'bnt-s-row-label';
+    labelWrap.innerHTML = `<span>${label}</span><span class="bnt-s-row-desc">${desc}</span>`;
+    el.innerHTML = ico;
+    el.appendChild(labelWrap);
+    if (ctrl) { ctrl.classList.add('bnt-s-control'); el.appendChild(ctrl); }
+    return el;
+  }
 
-    card.innerHTML = `
-      <div class="bnt-wc-head">
-        <span class="bnt-wc-title">Wallpaper</span>
-        <div class="bnt-wc-type-dropdown-wrap">
-          <button class="bnt-wc-type-btn" type="button">
-            <span class="bnt-wc-type-btn-name"></span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <div class="bnt-wc-type-list" hidden></div>
+  /* Helper: make a standard slider control */
+  function wpSlider(min, max, val, unit, onInput) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-s-slider-wrap';
+    wrap.innerHTML = `<input type="range" min="${min}" max="${max}" step="1" value="${val}"><span class="bnt-s-slider-val">${val}${unit}</span>`;
+    const input = wrap.querySelector('input');
+    const valEl = wrap.querySelector('.bnt-s-slider-val');
+    input.addEventListener('input', () => {
+      valEl.textContent = input.value + unit;
+      if (onInput) onInput(Number(input.value));
+    });
+    return wrap;
+  }
+
+  /* Helper: pill group control */
+  function wpPills(options, activeIdx = 0, onChange) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wp-pills';
+    options.forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'bnt-wp-pill' + (i === activeIdx ? ' active' : '');
+      btn.textContent = opt;
+      btn.addEventListener('click', () => {
+        wrap.querySelectorAll('.bnt-wp-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        if (onChange) onChange(opt, i);
+      });
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+
+  /* Helper: color button (matches bnt-s-color-btn style) */
+  function wpColorBtn(hex) {
+    const btn = document.createElement('button');
+    btn.className = 'bnt-s-color-btn';
+    btn.style.background = hex;
+    btn.innerHTML = `<input type="color" value="${hex}">`;
+    const inp = btn.querySelector('input');
+    inp.addEventListener('input', () => { btn.style.background = inp.value; });
+    return btn;
+  }
+
+  /* ── TEMPLATE: SOURCE ROW ── */
+  function wpSourceRow(labelText, placeholder, accept) {
+    const row = document.createElement('div');
+    row.className = 'bnt-s-row bnt-s-row--source';
+    row.innerHTML = `
+      <div class="bnt-wp-src-header">
+        <span class="bnt-s-row-ico">${ICO['image'] || ''}</span>
+        <div class="bnt-s-row-label">
+          <span>${labelText}</span>
+          <span class="bnt-s-row-desc">File or URL</span>
         </div>
       </div>
-      <div class="bnt-wc-preview"></div>
-      <div class="bnt-wc-controls"></div>
+      <div class="bnt-wp-src-body">
+        <label class="bnt-wp-src-upload">
+          <input type="file" accept="${accept}" hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span>Upload</span>
+        </label>
+        <div class="bnt-wp-src-url-wrap">
+          <input type="text" class="bnt-wp-src-url" placeholder="${placeholder}">
+          <button class="bnt-wp-src-paste-btn" title="Paste from clipboard">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
     `;
-
-    const typeBtn   = card.querySelector('.bnt-wc-type-btn');
-    const typeName  = card.querySelector('.bnt-wc-type-btn-name');
-    const typeList  = card.querySelector('.bnt-wc-type-list');
-    const preview   = card.querySelector('.bnt-wc-preview');
-    const controls  = card.querySelector('.bnt-wc-controls');
-
-    function setType(typeId) {
-      const t = WALLPAPER_TYPES.find(x => x.id === typeId) || WALLPAPER_TYPES[2];
-      typeName.textContent = t.label;
-      renderPreview(typeId, preview);
-      renderControls(typeId, controls);
-    }
-
-    function renderTypeList() {
-      typeList.innerHTML = '';
-      WALLPAPER_TYPES.forEach(t => {
-        const item = document.createElement('div');
-        item.className = 'bnt-wc-type-item' + (t.id === currentType ? ' active' : '');
-        item.textContent = t.label;
-        if (t.id === 'app') {
-          item.classList.add('bnt-wc-type-soon');
-          item.insertAdjacentHTML('beforeend', '<span class="bnt-wc-soon-badge">Soon</span>');
-        }
-        item.addEventListener('click', async () => {
-          closeTypeList();
-          if (t.id === 'app') {
-            openAppWidgetModal();
-            return;
-          }
-          typeList.querySelectorAll('.bnt-wc-type-item').forEach(i => i.classList.remove('active'));
-          item.classList.add('active');
-          setType(t.id);
-          if (S) await S.updateSettings({ wallpaperType: t.id });
-          window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { wallpaperType: t.id } }));
-        });
-        typeList.appendChild(item);
-      });
-    }
-
-    function closeTypeList() {
-      typeList.hidden = true;
-      document.removeEventListener('mousedown', onOutsideClick);
-    }
-    function onOutsideClick(e) {
-      if (!card.contains(e.target)) closeTypeList();
-    }
-    typeBtn.addEventListener('click', () => {
-      if (typeList.hidden) {
-        renderTypeList();
-        typeList.hidden = false;
-        document.addEventListener('mousedown', onOutsideClick);
-      } else {
-        closeTypeList();
+    row.querySelector('.bnt-wp-src-paste-btn').addEventListener('click', async () => {
+      try { row.querySelector('.bnt-wp-src-url').value = await navigator.clipboard.readText(); } catch {}
+    });
+    const fi = row.querySelector('input[type="file"]');
+    fi.addEventListener('change', () => {
+      if (fi.files[0]) {
+        const n = fi.files[0].name;
+        row.querySelector('.bnt-wp-src-upload span').textContent = n.length > 16 ? n.slice(0,15)+'…' : n;
       }
     });
-
-    renderTypeList();
-    setType(currentType);
-
-    return card;
+    return row;
   }
 
-  /** Превью в карточке — Шаг 1: статичная заглушка по типу */
-  function renderPreview(typeId, container) {
-    container.innerHTML = '';
-    const inner = document.createElement('div');
-    inner.className = 'bnt-wc-preview-inner bnt-wc-preview-' + typeId;
-    if (typeId === 'image' || typeId === 'video') {
-      inner.innerHTML = `<span class="bnt-wc-preview-placeholder">No file selected</span>`;
+  /* ── TEMPLATE: 2D POSITION PAD ── */
+  /* move-arrows icon for Position */
+  const ICO_MOVE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>`;
+
+  function wpOffsetPad(initX, initY, onMove) {
+    /* px: -100..100 (right = positive)
+       py: -100..100 (UP = positive — inverted from screen coords) */
+    let px = initX || 0, py = initY || 0;
+    const row = document.createElement('div');
+    row.className = 'bnt-s-row bnt-s-row--2d-pad';
+    row.innerHTML = `
+      <div class="bnt-wp-pad-header">
+        <span class="bnt-s-row-ico bnt-wp-pad-ico">${ICO_MOVE}</span>
+        <div class="bnt-s-row-label">
+          <span>Position</span>
+          <span class="bnt-s-row-desc">Drag to offset image on canvas</span>
+        </div>
+        <div class="bnt-wp-pad-vals">
+          <label class="bnt-wp-pad-val-wrap">
+            <span class="bnt-wp-pad-axis-lbl" style="color:#7eb3ff">X</span>
+            <input type="number" class="bnt-wp-pad-input bnt-wp-pad-x-input" value="0" min="-100" max="100" step="1">
+            <span class="bnt-wp-pad-unit">%</span>
+          </label>
+          <label class="bnt-wp-pad-val-wrap">
+            <span class="bnt-wp-pad-axis-lbl" style="color:#ff7eb3">Y</span>
+            <input type="number" class="bnt-wp-pad-input bnt-wp-pad-y-input" value="0" min="-100" max="100" step="1">
+            <span class="bnt-wp-pad-unit">%</span>
+          </label>
+          <button class="bnt-wp-pad-reset" title="Reset to center">↺</button>
+        </div>
+      </div>
+      <div class="bnt-wp-pad-area">
+        <div class="bnt-wp-pad-line bnt-wp-pad-line--h"></div>
+        <div class="bnt-wp-pad-line bnt-wp-pad-line--v"></div>
+        <div class="bnt-wp-pad-dot"></div>
+      </div>
+    `;
+    const area  = row.querySelector('.bnt-wp-pad-area');
+    const dot   = row.querySelector('.bnt-wp-pad-dot');
+    const xi    = row.querySelector('.bnt-wp-pad-x-input');
+    const yi    = row.querySelector('.bnt-wp-pad-y-input');
+
+    function upd(skipInputs) {
+      /* screen: top=0, bottom=100 → Y on screen bottom is +100% visually
+         we want UP = positive, so flip: screen_top  → py positive */
+      dot.style.left = ((px + 100) / 200 * 100) + '%';
+      dot.style.top  = ((-py + 100) / 200 * 100) + '%';  /* flipped */
+      if (!skipInputs) { xi.value = px; yi.value = py; }
+      /* glow colour changes with distance from center */
+      const dist = Math.sqrt(px*px + py*py) / 141;
+      const alpha = 0.3 + dist * 0.5;
+      dot.style.boxShadow = `0 0 0 2px var(--surface3), 0 0 ${8 + dist*18}px ${dist*6}px rgba(var(--accent-main-rgb, 123,147,255),${alpha})`;
+      if (onMove) onMove(px, py);
     }
-    container.appendChild(inner);
+
+    let drag = false;
+    dot.addEventListener('mousedown', e => { e.preventDefault(); drag = true; dot.classList.add('dragging'); });
+    document.addEventListener('mousemove', e => {
+      if (!drag) return;
+      const r = area.getBoundingClientRect();
+      px = Math.round(Math.max(-100, Math.min(100, (e.clientX - r.left) / r.width  * 200 - 100)));
+      py = Math.round(Math.max(-100, Math.min(100, -((e.clientY - r.top)  / r.height * 200 - 100)))); /* flipped */
+      upd(false);
+    });
+    document.addEventListener('mouseup', () => { if (drag) { drag = false; dot.classList.remove('dragging'); } });
+    area.addEventListener('click', e => {
+      if (e.target === dot) return;
+      const r = area.getBoundingClientRect();
+      px = Math.round((e.clientX - r.left) / r.width  * 200 - 100);
+      py = Math.round(-((e.clientY - r.top) / r.height * 200 - 100));
+      upd(false);
+    });
+    xi.addEventListener('input', () => { px = Math.max(-100, Math.min(100, Number(xi.value)||0)); upd(true); });
+    yi.addEventListener('input', () => { py = Math.max(-100, Math.min(100, Number(yi.value)||0)); upd(true); });
+    row.querySelector('.bnt-wp-pad-reset').addEventListener('click', () => { px = 0; py = 0; upd(false); });
+    upd(false);
+    return row;
   }
 
-  /** Панель настроек выбранного типа — Шаг 1: DOM-заглушки без обработчиков */
-  function renderControls(typeId, container) {
+  /* ── TEMPLATE: PILL-SELECT ROW ── */
+  function buildPillSelectRow(iconKey, label, desc, options, activeIdx, onChange) {
+    const row = document.createElement('div');
+    row.className = 'bnt-s-row bnt-s-row--pill-select';
+    if (iconKey && ICO[iconKey]) {
+      const ico = document.createElement('span');
+      ico.className = 'bnt-s-row-ico';
+      ico.innerHTML = ICO[iconKey];
+      row.appendChild(ico);
+    }
+    const lw = document.createElement('div');
+    lw.className = 'bnt-s-row-label';
+    lw.innerHTML = `<span>${label}</span><span class="bnt-s-row-desc">${desc}</span>`;
+    row.appendChild(lw);
+    const pg = document.createElement('div');
+    pg.className = 'bnt-s-pill-group';
+    options.forEach((opt, i) => {
+      const o = typeof opt === 'string' ? { label: opt, id: opt } : opt;
+      const btn = document.createElement('button');
+      btn.className = 'bnt-s-pill-btn' + (i === activeIdx ? ' active' : '') + (o.disabled ? ' bnt-s-pill-disabled' : '');
+      btn.innerHTML = o.label + (o.soon ? '<span class="bnt-s-pill-soon">soon</span>' : '');
+      if (!o.disabled) btn.addEventListener('click', () => {
+        pg.querySelectorAll('.bnt-s-pill-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (onChange) onChange(o, i);
+      });
+      pg.appendChild(btn);
+    });
+    row.appendChild(pg);
+    return row;
+  }
+
+  /* Build the type-selector dropdown control (standard bnt-s-control) */
+  function buildWpTypeDropdown(dynamicContainer) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-wp-type-wrap bnt-s-control';
+
+    const btn = document.createElement('button');
+    btn.className = 'bnt-wp-type-btn';
+    const cur = WP_TYPES.find(t => t.id === _wpType) || WP_TYPES[2];
+    btn.innerHTML = `<span class="bnt-wp-type-label">${cur.label}</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+
+    const menu = document.createElement('div');
+    menu.className = 'bnt-wp-type-menu';
+
+    WP_TYPES.forEach(t => {
+      const item = document.createElement('button');
+      item.className = 'bnt-wp-type-item' + (t.id === _wpType ? ' active' : '');
+      item.textContent = t.label;
+      if (t.id === 'app') item.innerHTML += ' <span class="bnt-wp-soon">soon</span>';
+      item.addEventListener('click', () => {
+        if (t.id === 'app') { closeMenu(); showAppWidgetStub(); return; }
+        _wpType = t.id;
+        menu.querySelectorAll('.bnt-wp-type-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        btn.querySelector('.bnt-wp-type-label').textContent = t.label;
+        closeMenu();
+        renderWpDynamic(dynamicContainer);
+      });
+      menu.appendChild(item);
+    });
+
+    function openMenu()  { menu.classList.add('open'); }
+    function closeMenu() { menu.classList.remove('open'); }
+    btn.addEventListener('click', e => { e.stopPropagation(); menu.classList.contains('open') ? closeMenu() : openMenu(); });
+    document.addEventListener('click', closeMenu);
+
+    wrap.appendChild(btn);
+    wrap.appendChild(menu);
+    return wrap;
+  }
+
+  function renderWpDynamic(container) {
     container.innerHTML = '';
-    switch (typeId) {
-      case 'solid':         container.appendChild(buildWallpaperControls_solid()); break;
-      case 'linear':        container.appendChild(buildWallpaperControls_linear()); break;
-      case 'radial-points': container.appendChild(buildWallpaperControls_radial()); break;
-      case 'image':         container.appendChild(buildWallpaperControls_image()); break;
-      case 'video':         container.appendChild(buildWallpaperControls_video()); break;
-      default: break;
+    switch (_wpType) {
+      case 'solid':         wpRows_Solid(container);  break;
+      case 'linear':        wpRows_Linear(container); break;
+      case 'radial-points': wpRows_Radial(container); break;
+      case 'image':         wpRows_Image(container);  break;
+      case 'video':         wpRows_Video(container);  break;
     }
   }
 
-  function buildWallpaperControls_solid() {
-    const wrap = document.createElement('div');
-    wrap.className = 'bnt-wc-panel bnt-wc-panel-solid';
-    wrap.innerHTML = `
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Color</span>
-        <div class="bnt-s-color-btn bnt-s-control bnt-wc-color-placeholder" style="background:#0e0f13">
-          <input type="color" value="#0e0f13">
-        </div>
-      </div>
-      ${buildOverlaySectionHtml()}
-    `;
-    return wrap;
+  /* ── TYPE 1: Solid ── */
+  function wpRows_Solid(c) {
+    const colorBtn = wpColorBtn('#0e0f13');
+    colorBtn.querySelector('input').addEventListener('input', e => {
+      const canvas = document.querySelector('.bnt-wp-canvas--solid');
+      if (canvas) canvas.style.background = e.target.value;
+    });
+    c.appendChild(wpMakeRow('brush', 'Color', 'Background fill color', colorBtn));
+    wpAppendOverlayRows(c);
   }
 
-  function buildWallpaperControls_linear() {
-    const wrap = document.createElement('div');
-    wrap.className = 'bnt-wc-panel bnt-wc-panel-linear';
-    wrap.innerHTML = `
-      <div class="bnt-wc-gradient-bar">
-        <div class="bnt-wc-gradient-stop" style="left:0%"></div>
-        <div class="bnt-wc-gradient-stop" style="left:100%"></div>
-        <button class="bnt-wc-gradient-add" type="button" title="Add stop">+</button>
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Angle</span>
-        <div class="bnt-s-control bnt-s-slider-wrap">
-          <input type="range" min="0" max="360" step="1" value="135">
-          <span class="bnt-s-slider-val">135°</span>
-        </div>
-      </div>
-      ${buildOverlaySectionHtml()}
-    `;
-    return wrap;
-  }
+  /* ── TYPE 2: Linear Gradient ── */
+  function wpRows_Linear(c) {
+    /* State: stops array + angle */
+    let stops = [
+      { pos: 0,   color: '#0e0f13' },
+      { pos: 100, color: '#1a1f3a' },
+    ];
+    let angle = 135;
+    let selIdx = null;
 
-  function buildWallpaperControls_radial() {
-    const wrap = document.createElement('div');
-    wrap.className = 'bnt-wc-panel bnt-wc-panel-radial';
-    wrap.innerHTML = `
-      <div class="bnt-wc-radial-area">
-        <div class="bnt-wc-radial-point" style="left:15%;top:8%;background:#7b93ff"></div>
-        <div class="bnt-wc-radial-point" style="left:85%;top:85%;background:#ff7eb3"></div>
-        <button class="bnt-wc-radial-add" type="button" title="Add point">+</button>
-      </div>
-      ${buildOverlaySectionHtml()}
-    `;
-    return wrap;
-  }
-
-  function buildWallpaperControls_image() {
-    const wrap = document.createElement('div');
-    wrap.className = 'bnt-wc-panel bnt-wc-panel-image';
-    wrap.innerHTML = `
-      <div class="bnt-wc-field-row">
-        <button class="bnt-wc-btn" type="button">Upload file</button>
-        <input class="bnt-wc-input" type="text" placeholder="Image URL">
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Fit</span>
-        <div class="bnt-wc-pill-group">
-          <button class="bnt-wc-pill active" type="button">Cover</button>
-          <button class="bnt-wc-pill" type="button">Contain</button>
-          <button class="bnt-wc-pill" type="button">Fill</button>
-          <button class="bnt-wc-pill" type="button">None</button>
+    const row = document.createElement('div');
+    row.className = 'bnt-s-row bnt-s-row--grad-editor';
+    row.innerHTML = `
+      <div class="bnt-wp-grad-header">
+        <span class="bnt-s-row-ico">${ICO['palette'] || ''}</span>
+        <div class="bnt-s-row-label">
+          <span>Gradient</span>
+          <span class="bnt-s-row-desc">Click stop to edit · Drag to reposition · Double-click track to add</span>
         </div>
       </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Scale</span>
-        <div class="bnt-s-control bnt-s-slider-wrap">
-          <input type="range" min="50" max="200" step="1" value="100">
-          <span class="bnt-s-slider-val">100%</span>
+      <div class="bnt-wp-grad-body">
+        <div class="bnt-wp-grad-track-wrap">
+          <div class="bnt-wp-grad-preview-strip"></div>
+          <div class="bnt-wp-grad-stops-row"></div>
         </div>
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">X offset</span>
-        <div class="bnt-s-control bnt-s-slider-wrap">
-          <input type="range" min="-100" max="100" step="1" value="0">
-          <span class="bnt-s-slider-val">0%</span>
+        <div class="bnt-wp-grad-stop-editor" style="display:none">
+          <div class="bnt-wp-grad-ed-row">
+            <span class="bnt-wp-grad-ed-lbl">Color</span>
+            <input type="color" class="bnt-wp-grad-ed-color" value="#0e0f13">
+          </div>
+          <div class="bnt-wp-grad-ed-row">
+            <span class="bnt-wp-grad-ed-lbl">Position</span>
+            <input type="range" class="bnt-wp-grad-ed-pos" min="0" max="100" step="1" value="0">
+            <span class="bnt-wp-grad-ed-posval">0%</span>
+          </div>
+          <button class="bnt-wp-grad-ed-del">Remove</button>
         </div>
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Y offset</span>
-        <div class="bnt-s-control bnt-s-slider-wrap">
-          <input type="range" min="-100" max="100" step="1" value="0">
-          <span class="bnt-s-slider-val">0%</span>
-        </div>
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Filter</span>
-        <div class="bnt-wc-pill-group">
-          <button class="bnt-wc-pill active" type="button">None</button>
-          <button class="bnt-wc-pill" type="button">B&amp;W</button>
-          <button class="bnt-wc-pill" type="button">Sepia</button>
-          <button class="bnt-wc-pill" type="button">Invert</button>
-          <button class="bnt-wc-pill" type="button">Warm</button>
-          <button class="bnt-wc-pill" type="button">Cool</button>
-        </div>
-      </div>
-    `;
-    return wrap;
-  }
-
-  function buildWallpaperControls_video() {
-    const wrap = document.createElement('div');
-    wrap.className = 'bnt-wc-panel bnt-wc-panel-video';
-    wrap.innerHTML = `
-      <div class="bnt-wc-field-row">
-        <button class="bnt-wc-btn" type="button">Upload file</button>
-        <input class="bnt-wc-input" type="text" placeholder="Video / GIF URL">
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Trim</span>
-        <div class="bnt-wc-trim-track">
-          <div class="bnt-wc-trim-handle bnt-wc-trim-start"></div>
-          <div class="bnt-wc-trim-handle bnt-wc-trim-end"></div>
-        </div>
-      </div>
-      <div class="bnt-wc-field-row">
-        <label class="bnt-wc-checkbox"><input type="checkbox" checked disabled> Loop</label>
-      </div>
-      <div class="bnt-wc-field-row bnt-wc-field-col">
-        <span class="bnt-wc-field-label">Audio</span>
-        <div class="bnt-wc-pill-group">
-          <button class="bnt-wc-pill active" type="button">From video</button>
-          <button class="bnt-wc-pill" type="button">Upload file</button>
-          <button class="bnt-wc-pill" type="button">URL</button>
-          <button class="bnt-wc-pill" type="button">No audio</button>
-        </div>
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Volume</span>
-        <div class="bnt-s-control bnt-s-slider-wrap">
-          <input type="range" min="0" max="100" step="1" value="50">
-          <span class="bnt-s-slider-val">50%</span>
-        </div>
-      </div>
-      <div class="bnt-wc-field-row">
-        <span class="bnt-wc-field-label">Speed</span>
-        <div class="bnt-s-control bnt-s-slider-wrap">
-          <input type="range" min="0.25" max="2" step="0.05" value="1">
-          <span class="bnt-s-slider-val">1x</span>
-        </div>
-      </div>
-    `;
-    return wrap;
-  }
-
-  /** Overlay (Blur/Noise/Pattern) — общий HTML-фрагмент для Solid/Linear/Radial */
-  function buildOverlaySectionHtml() {
-    return `
-      <div class="bnt-wc-overlay-section">
-        <div class="bnt-wc-field-row">
-          <span class="bnt-wc-field-label">Overlay</span>
-          <div class="bnt-wc-pill-group">
-            <button class="bnt-wc-pill active" type="button">None</button>
-            <button class="bnt-wc-pill" type="button">Blur</button>
-            <button class="bnt-wc-pill" type="button">Noise</button>
-            <button class="bnt-wc-pill" type="button">Pattern</button>
+        <div class="bnt-wp-grad-footer">
+          <div class="bnt-wp-grad-angle-wrap">
+            <span class="bnt-wp-grad-angle-lbl">${ICO['eye'] || ''}Angle</span>
+            <input type="range" class="bnt-wp-grad-angle-slider" min="0" max="360" step="1" value="135">
+            <input type="number" class="bnt-wp-grad-angle-num" min="0" max="360" value="135">
+            <span class="bnt-wp-grad-angle-unit">°</span>
           </div>
         </div>
       </div>
     `;
+    c.appendChild(row);
+
+    const previewStrip = row.querySelector('.bnt-wp-grad-preview-strip');
+    const stopsRow     = row.querySelector('.bnt-wp-grad-stops-row');
+    const editor       = row.querySelector('.bnt-wp-grad-stop-editor');
+    const edColor      = row.querySelector('.bnt-wp-grad-ed-color');
+    const edPos        = row.querySelector('.bnt-wp-grad-ed-pos');
+    const edPosVal     = row.querySelector('.bnt-wp-grad-ed-posval');
+    const edDel        = row.querySelector('.bnt-wp-grad-ed-del');
+    const angleSlider  = row.querySelector('.bnt-wp-grad-angle-slider');
+    const angleNum     = row.querySelector('.bnt-wp-grad-angle-num');
+
+    function cssGradient() {
+      const sorted = [...stops].sort((a,b) => a.pos - b.pos);
+      const stops_css = sorted.map(s => `${s.color} ${s.pos}%`).join(', ');
+      return `linear-gradient(${angle}deg, ${stops_css})`;
+    }
+
+    function repaint() {
+      previewStrip.style.background = cssGradient();
+      /* live canvas update */
+      const canvas = document.querySelector('.bnt-wp-canvas--linear');
+      if (canvas) canvas.style.background = cssGradient();
+      renderStops();
+    }
+
+    function renderStops() {
+      stopsRow.innerHTML = '';
+      stops.forEach((s, i) => {
+        const pin = document.createElement('div');
+        pin.className = 'bnt-wp-grad-pin' + (i === selIdx ? ' selected' : '');
+        pin.style.cssText = `left:${s.pos}%;background:${s.color};box-shadow:0 0 0 2px ${s.color},0 0 0 3.5px rgba(255,255,255,0.5)`;
+        /* left-click OR right-click to open editor */
+        pin.addEventListener('click', e => { e.stopPropagation(); selectStop(i); });
+        pin.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); selectStop(i); });
+        /* drag — only left button */
+        let drag = false, startX, startPos;
+        pin.addEventListener('mousedown', e => {
+          if (e.button !== 0) return;
+          e.preventDefault(); drag = true;
+          startX = e.clientX; startPos = s.pos;
+          pin.classList.add('dragging');
+        });
+        document.addEventListener('mousemove', e => {
+          if (!drag) return;
+          const r = stopsRow.getBoundingClientRect();
+          s.pos = Math.max(0, Math.min(100, startPos + (e.clientX - startX) / r.width * 100));
+          s.pos = Math.round(s.pos);
+          pin.style.left = s.pos + '%';
+          if (i === selIdx) { edPos.value = s.pos; edPosVal.textContent = s.pos + '%'; }
+          repaint();
+        });
+        document.addEventListener('mouseup', () => { if (drag) { drag = false; pin.classList.remove('dragging'); renderStops(); } });
+        stopsRow.appendChild(pin);
+      });
+    }
+
+    function selectStop(i) {
+      selIdx = i;
+      const s = stops[i];
+      edColor.value = s.color;
+      edPos.value   = s.pos;
+      edPosVal.textContent = s.pos + '%';
+      editor.style.display = 'flex';
+      edDel.style.display = stops.length > 2 ? 'inline-flex' : 'none';
+      renderStops();
+    }
+
+    edColor.addEventListener('input', () => {
+      if (selIdx === null) return;
+      stops[selIdx].color = edColor.value;
+      repaint();
+    });
+    edPos.addEventListener('input', () => {
+      if (selIdx === null) return;
+      stops[selIdx].pos = Number(edPos.value);
+      edPosVal.textContent = edPos.value + '%';
+      repaint();
+    });
+    edDel.addEventListener('click', () => {
+      if (selIdx === null || stops.length <= 2) return;
+      stops.splice(selIdx, 1);
+      selIdx = null;
+      editor.style.display = 'none';
+      repaint();
+    });
+
+    /* double-click track to add stop */
+    previewStrip.addEventListener('dblclick', e => {
+      const r = previewStrip.getBoundingClientRect();
+      const pos = Math.round((e.clientX - r.left) / r.width * 100);
+      /* interpolate color from existing gradient */
+      const sorted = [...stops].sort((a,b) => a.pos - b.pos);
+      let color = sorted[0].color;
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (pos >= sorted[i].pos && pos <= sorted[i+1].pos) {
+          color = sorted[i].color; break;
+        }
+      }
+      stops.push({ pos, color });
+      selectStop(stops.length - 1);
+      repaint();
+    });
+
+    /* angle — slider wraps 0↔360, num input unbounded then normalised */
+    function setAngle(v) {
+      angle = ((Number(v) % 360) + 360) % 360;
+      angleSlider.value = angle; angleNum.value = angle;
+      repaint();
+    }
+    angleSlider.addEventListener('input', () => setAngle(angleSlider.value));
+    /* wrap: when slider hits 0 or 360 extremes, loop it */
+    angleSlider.addEventListener('change', () => {
+      if (Number(angleSlider.value) === 360) { angle = 0; angleSlider.value = 0; angleNum.value = 0; repaint(); }
+    });
+    angleNum.addEventListener('input', () => setAngle(angleNum.value));
+
+    /* click outside editor to deselect */
+    document.addEventListener('click', e => {
+      if (!row.contains(e.target)) { selIdx = null; editor.style.display = 'none'; renderStops(); }
+    });
+
+    repaint();
+    wpAppendOverlayRows(c);
   }
 
-  /** Модальная заглушка App/Widget */
-  function openAppWidgetModal() {
-    let modal = document.getElementById('bnt-wc-appwidget-modal');
-    if (modal) { modal.hidden = false; return; }
+  /* ── TYPE 3: Radial Points ── */
+  function wpRows_Radial(c) {
+    const bgColorBtn = wpColorBtn(_radialBgColor);
+    bgColorBtn.querySelector('input').addEventListener('input', e => {
+      _radialBgColor = e.target.value;
+      const canvas = document.querySelector('.bnt-wp-canvas--radial-points');
+      if (canvas) canvas.style.backgroundColor = _radialBgColor;
+    });
+    c.appendChild(wpMakeRow('brush', 'Background', 'Base fill color behind glow points', bgColorBtn));
+    wpAppendOverlayRows(c);
+  }
 
-    modal = document.createElement('div');
-    modal.id = 'bnt-wc-appwidget-modal';
-    modal.innerHTML = `
-      <div class="bnt-wc-modal-card">
-        <div class="bnt-wc-modal-ico">🔮</div>
-        <div class="bnt-wc-modal-title">App / Widget</div>
-        <div class="bnt-wc-modal-sub">Coming soon</div>
-        <p class="bnt-wc-modal-text">This mode will let you embed live widgets or web apps as your background.</p>
-        <button class="bnt-wc-modal-ok" type="button">Got it</button>
+  /* ── TYPE 4: Static Image ── */
+  function wpRows_Image(c) {
+    c.appendChild(wpSourceRow('Source', 'Paste image URL…', 'image/*'));
+    c.appendChild(wpMakeRow('eye', 'Fit', 'How the image fills the screen', wpPills(['Cover','Contain','Fill','None'], 0)));
+    c.appendChild(wpMakeRow('palette', 'Scale', 'Zoom level', wpSlider(50, 200, 100, '%')));
+    c.appendChild(wpOffsetPad(0, 0));
+    c.appendChild(wpMakeRow('brush', 'Filter', 'Visual filter applied to image', wpPills(['None','B&W','Sepia','Invert','Warm','Cool'], 0)));
+  }
+
+  /* ── TYPE 5: Video / GIF ── */
+  function wpRows_Video(c) {
+    c.appendChild(wpSourceRow('Source', 'Paste video or GIF URL…', 'video/*,image/gif'));
+    c.appendChild(wpMakeRow('eye', 'Speed', 'Playback rate', wpSlider(25, 200, 100, '%')));
+    const at = document.createElement('div');
+    at.className = 'bnt-s-section-title'; at.textContent = 'Audio';
+    c.appendChild(at);
+    c.appendChild(wpMakeRow('eye', 'Source', 'Audio track to use', wpPills(['From video','Upload','URL','None'], 0)));
+    c.appendChild(wpMakeRow('eye', 'Volume', 'Playback volume', wpSlider(0, 100, 50, '%')));
+  }
+
+  /* ── Radial canvas (interactive) ── */
+  function _buildRadialCanvas(canvas) {
+    function repaint() {
+      canvas.style.backgroundImage = _radialPoints.map(p =>
+        `radial-gradient(ellipse ${p.radius}% ${p.radius}% at ${p.x}% ${p.y}%, ${p.color}40 0%, transparent 100%)`
+      ).join(',');
+      canvas.style.backgroundColor = _radialBgColor;
+    }
+    function renderDots() {
+      canvas.querySelectorAll('.bnt-wp-radial-dot').forEach(d => d.remove());
+      _radialPoints.forEach((pt, idx) => {
+        const dot = document.createElement('div');
+        dot.className = 'bnt-wp-radial-dot';
+        dot.style.cssText = `left:${pt.x}%;top:${pt.y}%;background:${pt.color};box-shadow:0 0 10px ${pt.color}80,0 0 24px ${pt.color}30`;
+        let drag = false, sx, sy, spx, spy;
+        dot.addEventListener('mousedown', e => {
+          e.preventDefault(); drag = true;
+          sx = e.clientX; sy = e.clientY; spx = pt.x; spy = pt.y;
+          dot.classList.add('dragging');
+        });
+        document.addEventListener('mousemove', e => {
+          if (!drag) return;
+          const r = canvas.getBoundingClientRect();
+          pt.x = Math.max(2, Math.min(98, spx + (e.clientX - sx) / r.width  * 100));
+          pt.y = Math.max(2, Math.min(98, spy + (e.clientY - sy) / r.height * 100));
+          dot.style.left = pt.x + '%'; dot.style.top = pt.y + '%';
+          repaint();
+        });
+        document.addEventListener('mouseup', () => { if (drag) { drag = false; dot.classList.remove('dragging'); } });
+        dot.addEventListener('dblclick', e => {
+          e.stopPropagation();
+          canvas.querySelectorAll('.bnt-wp-dot-editor').forEach(el => el.remove());
+          const ed = _buildDotEditor(pt, idx, () => { repaint(); renderDots(); }, () => { _radialPoints.splice(idx,1); repaint(); renderDots(); });
+          ed.style.left = Math.min(pt.x, 65) + '%';
+          ed.style.top  = (pt.y > 55 ? (pt.y - 44) : (pt.y + 8)) + '%';
+          canvas.appendChild(ed);
+        });
+        canvas.appendChild(dot);
+      });
+    }
+    canvas.addEventListener('click', () => canvas.querySelectorAll('.bnt-wp-dot-editor').forEach(el => el.remove()));
+    repaint(); renderDots();
+  }
+
+  function _buildDotEditor(pt, idx, onChange, onDelete) {
+    const ed = document.createElement('div');
+    ed.className = 'bnt-wp-dot-editor'; ed.dataset.idx = idx;
+    ed.innerHTML = `
+      <div class="bnt-wp-dot-ed-row">
+        <span class="bnt-wp-dot-ed-label">Color</span>
+        <input type="color" class="bnt-wp-dot-ed-color" value="${pt.color}">
       </div>
+      <div class="bnt-wp-dot-ed-row">
+        <span class="bnt-wp-dot-ed-label">Radius</span>
+        <input type="range" class="bnt-wp-dot-ed-slider" min="10" max="90" value="${pt.radius}">
+        <span class="bnt-wp-dot-ed-val">${pt.radius}%</span>
+      </div>
+      <button class="bnt-wp-dot-ed-del">Remove</button>
     `;
-    document.body.appendChild(modal);
-
-    function close() { modal.hidden = true; }
-    modal.querySelector('.bnt-wc-modal-ok').addEventListener('click', close);
-    modal.addEventListener('mousedown', e => { if (e.target === modal) close(); });
+    ed.addEventListener('click', e => e.stopPropagation());
+    const ci = ed.querySelector('.bnt-wp-dot-ed-color');
+    ci.addEventListener('input', () => { pt.color = ci.value; onChange(); });
+    const ri = ed.querySelector('.bnt-wp-dot-ed-slider'), rv = ed.querySelector('.bnt-wp-dot-ed-val');
+    ri.addEventListener('input', () => { pt.radius = Number(ri.value); rv.textContent = pt.radius + '%'; onChange(); });
+    ed.querySelector('.bnt-wp-dot-ed-del').addEventListener('click', onDelete);
+    return ed;
   }
 
-  /* ── Build the control element for a settings row ── */
+  /* ── renderPreviewCanvas ── */
+  function renderPreviewCanvas(wrap, toolbarEl) {
+    wrap.innerHTML = '';
+    if (toolbarEl) toolbarEl.innerHTML = '';
+
+    if (_wpViewMode === 'zones') {
+      const stub = document.createElement('div');
+      stub.className = 'bnt-wp-canvas bnt-wp-canvas--zones';
+      stub.innerHTML = `
+        <div class="bnt-wp-canvas-zone-hint">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+          <span class="bnt-wp-canvas-zone-label">Zone Layout</span>
+          <span class="bnt-wp-canvas-soon-badge">Coming soon</span>
+          <span class="bnt-wp-canvas-zone-sub">Drag &amp; reorder page elements</span>
+        </div>`;
+      wrap.appendChild(stub);
+      return;
+    }
+
+    const canvas = document.createElement('div');
+    canvas.className = 'bnt-wp-canvas bnt-wp-canvas--' + _wpType;
+
+    if (_wpType === 'solid') {
+      canvas.style.background = '#0e0f13';
+      const l = document.createElement('span'); l.className = 'bnt-wp-canvas-type-label'; l.textContent = 'Solid Color';
+      canvas.appendChild(l);
+    } else if (_wpType === 'linear') {
+      canvas.style.background = 'linear-gradient(135deg,#0e0f13 0%,#1a1f3a 100%)';
+      const l = document.createElement('span'); l.className = 'bnt-wp-canvas-type-label'; l.textContent = 'Linear Gradient';
+      canvas.appendChild(l);
+    } else if (_wpType === 'radial-points') {
+      _buildRadialCanvas(canvas);
+      if (toolbarEl) {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'bnt-wp-add-point-btn';
+        addBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add point`;
+        addBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          _radialPoints.push({ x: 35 + Math.random()*30, y: 25 + Math.random()*50, color: '#7eb3ff', radius: 45 });
+          renderPreviewCanvas(wrap, toolbarEl);
+        });
+        toolbarEl.appendChild(addBtn);
+      }
+    } else if (_wpType === 'image') {
+      canvas.innerHTML = `<div class="bnt-wp-canvas-empty">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+        </svg>
+        <span>No image loaded</span>
+        <button class="bnt-wp-canvas-upload-btn">Upload image</button>
+      </div>`;
+    } else if (_wpType === 'video') {
+      canvas.innerHTML = `<div class="bnt-wp-canvas-empty">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+        </svg>
+        <span>No video loaded</span>
+        <button class="bnt-wp-canvas-upload-btn">Upload video / GIF</button>
+      </div>`;
+    }
+    wrap.appendChild(canvas);
+  }
+
+  /* ── buildWallpaperSection ── */
+  function buildWallpaperSection() {
+    const frag = document.createDocumentFragment();
+
+    /* SECTION: Preview */
+    const previewSec = document.createElement('div');
+    previewSec.className = 'bnt-s-section';
+    const previewTitle = document.createElement('div');
+    previewTitle.className = 'bnt-s-section-title';
+    previewTitle.textContent = 'Preview';
+    previewSec.appendChild(previewTitle);
+
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'bnt-wp-canvas-wrap';
+
+    /* toolbarEl: between Preview and Background — declared early for closure access */
+    const toolbarEl = document.createElement('div');
+    toolbarEl.className = 'bnt-wp-canvas-toolbar';
+
+    const viewModeRow = buildPillSelectRow(
+      'eye', 'View mode', 'Switch between wallpaper editor and page layout',
+      [
+        { label: 'Wallpaper Customization', id: 'customization' },
+        { label: 'Zone Layout', id: 'zones', disabled: true, soon: true },
+      ],
+      0,
+      (opt) => { _wpViewMode = opt.id; renderPreviewCanvas(canvasWrap, toolbarEl); }
+    );
+    previewSec.appendChild(viewModeRow);
+    renderPreviewCanvas(canvasWrap, toolbarEl);
+    previewSec.appendChild(canvasWrap);
+    frag.appendChild(previewSec);
+    frag.appendChild(toolbarEl);
+
+    /* SECTION: Background */
+    const bgSec = document.createElement('div');
+    bgSec.className = 'bnt-s-section';
+    const bgTitle = document.createElement('div');
+    bgTitle.className = 'bnt-s-section-title';
+    bgTitle.textContent = 'Background';
+    bgSec.appendChild(bgTitle);
+
+    const dynamicContainer = document.createElement('div');
+    dynamicContainer.className = 'bnt-wp-dynamic';
+
+    const typeRow = buildPillSelectRow(
+      'image', 'Type', 'Wallpaper style',
+      WP_TYPES.map(t => ({ label: t.label, id: t.id, soon: t.id === 'app' })),
+      WP_TYPES.findIndex(t => t.id === _wpType),
+      (opt) => {
+        if (opt.id === 'app') { showAppWidgetStub(); return; }
+        _wpType = opt.id;
+        renderWpDynamic(dynamicContainer);
+        renderPreviewCanvas(canvasWrap, toolbarEl);
+      }
+    );
+    bgSec.appendChild(typeRow);
+    bgSec.appendChild(dynamicContainer);
+    frag.appendChild(bgSec);
+
+    renderWpDynamic(dynamicContainer);
+    return frag;
+  }
+
+  /* ── Overlay rows (shared by Solid / Linear / Radial) ── */
+  function wpAppendOverlayRows(c) {
+    const overlayTitle = document.createElement('div');
+    overlayTitle.className = 'bnt-s-section-title';
+    overlayTitle.textContent = 'Overlay';
+    c.appendChild(overlayTitle);
+
+    /* Dynamic params container */
+    const paramsEl = document.createElement('div');
+    paramsEl.className = 'bnt-wp-overlay-params';
+
+    const modePills = wpPills(['None','Blur','Noise','Pattern'], 0, (opt) => {
+      paramsEl.innerHTML = '';
+      if (opt === 'Blur') {
+        paramsEl.appendChild(wpMakeRow('eye', 'Intensity', 'Blur radius', wpSlider(0, 40, 10, 'px')));
+      } else if (opt === 'Noise') {
+        paramsEl.appendChild(wpMakeRow('eye', 'Coverage', 'Noise density', wpSlider(0, 100, 30, '%')));
+        paramsEl.appendChild(wpMakeRow('brush', 'Color', 'Noise pixel color', wpColorBtn('#888888')));
+      } else if (opt === 'Pattern') {
+        const charsWrap = document.createElement('div');
+        charsWrap.className = 'bnt-s-control';
+        charsWrap.innerHTML = `<input type="text" class="bnt-wp-url-input" value="· ∙ • ◦" style="width:120px">`;
+        paramsEl.appendChild(wpMakeRow('eye', 'Chars', 'Characters used in pattern', charsWrap));
+        paramsEl.appendChild(wpMakeRow('eye', 'Size', 'Character size', wpSlider(8, 48, 14, 'px')));
+        paramsEl.appendChild(wpMakeRow('eye', 'Opacity', 'Pattern opacity', wpSlider(0, 100, 20, '%')));
+        paramsEl.appendChild(wpMakeRow('eye', 'Gap', 'Spacing between characters', wpSlider(4, 40, 16, 'px')));
+      }
+    });
+    modePills.classList.add('bnt-s-control');
+    c.appendChild(wpMakeRow('eye', 'Mode', 'Overlay applied on top of background', modePills));
+    c.appendChild(paramsEl);
+  }
+
+
+
+  /* ── App / Widget stub modal ── */
+  function showAppWidgetStub() {
+    let modal = document.getElementById('bnt-wp-app-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'bnt-wp-app-modal';
+      modal.className = 'bnt-wp-modal-overlay';
+      modal.innerHTML = `
+        <div class="bnt-wp-modal">
+          <div class="bnt-wp-modal-icon">🔮</div>
+          <div class="bnt-wp-modal-title">App / Widget</div>
+          <div class="bnt-wp-modal-sub">Coming soon</div>
+          <p class="bnt-wp-modal-body">This mode will let you embed live widgets or web apps as your background.</p>
+          <button class="bnt-wp-modal-ok">Got it</button>
+        </div>
+      `;
+      modal.addEventListener('click', e => {
+        if (e.target === modal || e.target.classList.contains('bnt-wp-modal-ok')) modal.classList.remove('open');
+      });
+      document.body.appendChild(modal);
+    }
+    modal.classList.add('open');
+  }
+
   function buildControl(row) {
     /* ── Wallpaper ── */
     if (row.label === 'Wallpaper') {
-      return buildWallpaperCard();
+      return buildWallpaperSection(); /* returns DocumentFragment */
     }
 
     /* ── Bookmarks Panel ── */
@@ -1048,10 +1498,8 @@
     const ctrl = buildControl(row);
     if (ctrl instanceof DocumentFragment) return ctrl;
 
-    /* Special case: wide standalone card (e.g. Wallpaper) — no row wrapper */
-    if (ctrl.classList && ctrl.classList.contains('bnt-wallpaper-card')) {
-      return ctrl;
-    }
+    /* WallpaperCard — returns the card directly, no standard row wrapping */
+    if (row.label === 'Wallpaper') return ctrl;
 
     const el = document.createElement('div');
     el.className = 'bnt-s-row';
@@ -1103,10 +1551,12 @@
       const secEl = document.createElement('div');
       secEl.className = 'bnt-s-section';
 
-      const titleEl = document.createElement('div');
-      titleEl.className = 'bnt-s-section-title';
-      titleEl.textContent = sec.title;
-      secEl.appendChild(titleEl);
+      if (sec.title) {
+        const titleEl = document.createElement('div');
+        titleEl.className = 'bnt-s-section-title';
+        titleEl.textContent = sec.title;
+        secEl.appendChild(titleEl);
+      }
 
       sec.rows.forEach(row => secEl.append(buildRow(row)));
       elCategoryView.appendChild(secEl);

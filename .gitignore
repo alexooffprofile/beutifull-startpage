@@ -8,3 +8,4 @@ dist/
 *.xpi
 *.zip
 .env
+*.bat
