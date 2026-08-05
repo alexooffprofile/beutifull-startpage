@@ -1,13 +1,13 @@
 /**
  * bookmark-prompt.css — Beautiful New Tab · Bookmark prompt overlay
- * Injected into target pages by background.js alongside bookmark-prompt.js
+ * Design matches the extension's main UI: dark surfaces, DM Sans, accent #7b93ff
  */
 
 #bnt-prompt-root {
   all: initial;
   position: fixed;
-  top: 24px;
-  right: 15%;
+  top: 20px;
+  right: 20px;
   z-index: 2147483647;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
@@ -18,44 +18,46 @@
   all: initial;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 320px;
-  background: #16181f;
-  border: 1.5px solid rgba(255,255,255,0.10);
-  border-radius: 18px;
-  padding: 18px 18px 16px;
+  gap: 10px;
+  width: 310px;
+  background: #13141a;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px;
+  padding: 16px;
   box-shadow:
-    0 8px 32px rgba(0,0,0,0.55),
-    0 2px 8px rgba(0,0,0,0.35),
-    0 0 0 1px rgba(255,255,255,0.04);
-  animation: bnt-slide-in 0.32s cubic-bezier(0.34,1.46,0.64,1) both;
+    0 24px 64px rgba(0,0,0,0.7),
+    0 4px 16px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(255,255,255,0.03);
+  animation: bnt-prompt-in 0.28s cubic-bezier(0.34, 1.46, 0.64, 1) both;
   font-family: inherit;
-  color: #e8e9ee;
+  color: #e2e3ea;
+  box-sizing: border-box;
 }
 
-@keyframes bnt-slide-in {
-  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+@keyframes bnt-prompt-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-/* ── Header row ── */
+/* ── Header ── */
 #bnt-prompt-header {
   all: initial;
   display: flex;
   align-items: center;
   gap: 8px;
   font-family: inherit;
+  margin-bottom: 2px;
 }
 
 #bnt-prompt-label {
   all: initial;
-  font-family: inherit;
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: rgba(232,233,238,0.45);
   flex: 1;
+  font-family: inherit;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(226,227,234,0.35);
 }
 
 #bnt-prompt-close {
@@ -63,18 +65,56 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
   cursor: pointer;
-  color: rgba(232,233,238,0.45);
-  transition: background 0.2s, color 0.2s;
-  flex-shrink: 0;
+  color: rgba(226,227,234,0.35);
   font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
 #bnt-prompt-close:hover {
-  background: rgba(255,255,255,0.08);
-  color: #e8e9ee;
+  background: rgba(255,255,255,0.07);
+  color: rgba(226,227,234,0.8);
+}
+
+/* ── Destination selector ── */
+#bnt-dest-row {
+  all: initial;
+  display: flex;
+  gap: 5px;
+  font-family: inherit;
+}
+
+.bnt-dest-btn {
+  all: initial;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  padding: 7px 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: rgba(226,227,234,0.4);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.bnt-dest-btn:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.12);
+  color: rgba(226,227,234,0.7);
+}
+.bnt-dest-btn.bnt-dest-active {
+  background: rgba(123,147,255,0.12);
+  border-color: rgba(123,147,255,0.4);
+  color: #7b93ff;
 }
 
 /* ── Inputs ── */
@@ -83,51 +123,48 @@
   display: block;
   width: 100%;
   box-sizing: border-box;
-  background: #1e2029;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 10px;
-  padding: 8px 12px;
-  color: #e8e9ee;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px;
+  padding: 8px 11px;
+  color: #e2e3ea;
   font-family: inherit;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 400;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s, box-shadow 0.15s;
   caret-color: #7b93ff;
 }
 #bnt-prompt-title:focus {
-  border-color: rgba(255,255,255,0.18);
-  box-shadow: 0 0 0 2px rgba(123,147,255,0.14);
+  border-color: rgba(123,147,255,0.45);
+  box-shadow: 0 0 0 2px rgba(123,147,255,0.1);
 }
-#bnt-prompt-title::placeholder { color: rgba(232,233,238,0.35); }
+#bnt-prompt-title::placeholder { color: rgba(226,227,234,0.28); }
 
 #bnt-prompt-url {
   all: initial;
   display: block;
   width: 100%;
   box-sizing: border-box;
-  background: #1e2029;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 10px;
-  padding: 8px 12px;
-  color: rgba(232,233,238,0.45);
+  padding: 5px 11px;
+  color: rgba(226,227,234,0.3);
   font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 400;
+  font-size: 0.72rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: default;
   user-select: none;
   pointer-events: none;
+  letter-spacing: 0.01em;
 }
 
-/* ── Thumbnail picker ── */
+/* ── Thumbnail row ── */
 #bnt-thumb-row {
   all: initial;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-family: inherit;
 }
 
@@ -136,24 +173,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  background: #1e2029;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px;
   cursor: pointer;
-  color: rgba(232,233,238,0.55);
+  color: rgba(226,227,234,0.45);
   font-family: inherit;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .bnt-thumb-nav:hover {
-  background: #252730;
+  background: rgba(255,255,255,0.08);
   border-color: rgba(255,255,255,0.14);
-  color: #e8e9ee;
+  color: rgba(226,227,234,0.9);
 }
 .bnt-thumb-nav:disabled {
-  opacity: 0.28;
+  opacity: 0.22;
   cursor: default;
   pointer-events: none;
 }
@@ -162,10 +199,10 @@
   all: initial;
   position: relative;
   flex: 1;
-  height: 80px;
-  background: #1e2029;
+  height: 76px;
+  background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 10px;
+  border-radius: 9px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -180,7 +217,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: 9px;
   display: none;
 }
 #bnt-thumb-img.visible { display: block; }
@@ -188,53 +225,56 @@
 #bnt-thumb-empty {
   all: initial;
   font-family: inherit;
-  font-size: 0.72rem;
-  color: rgba(232,233,238,0.28);
+  font-size: 0.7rem;
+  color: rgba(226,227,234,0.2);
   text-align: center;
   padding: 0 12px;
+  letter-spacing: 0.01em;
 }
 
 #bnt-thumb-counter {
   all: initial;
   position: absolute;
   bottom: 5px;
-  right: 7px;
+  right: 6px;
   font-family: inherit;
-  font-size: 0.62rem;
-  color: rgba(232,233,238,0.5);
-  background: rgba(14,15,19,0.7);
+  font-size: 0.6rem;
+  color: rgba(226,227,234,0.45);
+  background: rgba(13,14,19,0.72);
   border-radius: 5px;
   padding: 1px 5px;
   pointer-events: none;
+  letter-spacing: 0.02em;
 }
 
-/* Upload button — sits as overlay on bottom-left of preview */
+/* Upload overlay button */
 #bnt-thumb-upload {
   all: initial;
   position: absolute;
   bottom: 5px;
   left: 6px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: rgba(14,15,19,0.72);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(13,14,19,0.68);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 6px;
   padding: 3px 7px;
   cursor: pointer;
-  color: rgba(232,233,238,0.7);
+  color: rgba(226,227,234,0.6);
   font-family: inherit;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 500;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
 #bnt-thumb-upload:hover {
-  background: rgba(30,32,41,0.92);
-  color: #e8e9ee;
+  background: rgba(13,14,19,0.9);
+  border-color: rgba(255,255,255,0.18);
+  color: #e2e3ea;
 }
 
-/* ── Add button ── */
+/* ── Add / Save button ── */
 #bnt-prompt-add {
   all: initial;
   display: flex;
@@ -244,26 +284,127 @@
   box-sizing: border-box;
   background: #7b93ff;
   border: none;
-  border-radius: 11px;
-  padding: 10px 0;
+  border-radius: 10px;
+  padding: 9px 0;
   color: #fff;
   font-family: inherit;
-  font-size: 0.88rem;
-  font-weight: 500;
+  font-size: 0.84rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.15s;
   letter-spacing: 0.02em;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  box-shadow: 0 2px 16px rgba(123,147,255,0.25);
 }
-#bnt-prompt-add:hover  { background: #6a80f0; }
+#bnt-prompt-add:hover {
+  background: #6a80f0;
+  box-shadow: 0 4px 20px rgba(123,147,255,0.35);
+}
 #bnt-prompt-add:active { transform: scale(0.98); }
 #bnt-prompt-add:disabled {
-  background: rgba(123,147,255,0.35);
+  background: rgba(123,147,255,0.28);
+  box-shadow: none;
   cursor: default;
   pointer-events: none;
 }
 
+/* ── Copy link button (in header) ── */
+#bnt-copy-link {
+  all: initial;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: rgba(226,227,234,0.35);
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+#bnt-copy-link:hover { background: rgba(255,255,255,.07); color: rgba(226,227,234,.8); }
+#bnt-copy-link.bnt-copy-ok { color: #42c98a; }
+
+/* ── Tags section ── */
+#bnt-tags-wrap {
+  all: initial;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 9px;
+  padding: 5px 8px;
+  min-height: 34px;
+  cursor: text;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+  width: 100%;
+}
+#bnt-tags-wrap:focus-within {
+  border-color: rgba(123,147,255,.4);
+}
+
+#bnt-tags-pills {
+  all: initial;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-family: inherit;
+}
+
+.bnt-tag-pill {
+  all: initial;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(123,147,255,.15);
+  border: 1px solid rgba(123,147,255,.3);
+  border-radius: 5px;
+  padding: 2px 6px 2px 7px;
+  font-family: inherit;
+  font-size: 0.71rem;
+  color: #7b93ff;
+  white-space: nowrap;
+}
+
+.bnt-tag-rm {
+  all: initial;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: rgba(123,147,255,.6);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.12s, background 0.12s;
+}
+.bnt-tag-rm:hover { color: #7b93ff; background: rgba(123,147,255,.15); }
+
+#bnt-tags-input {
+  all: initial;
+  flex: 1;
+  min-width: 80px;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: rgba(226,227,234,.8);
+  caret-color: #7b93ff;
+  padding: 2px 0;
+}
+#bnt-tags-input::placeholder { color: rgba(226,227,234,.25); }
+
 /* ── Success state ── */
 #bnt-prompt.bnt-success #bnt-prompt-add {
-  background: #53d8a0;
+  background: #42c98a;
+  box-shadow: 0 2px 16px rgba(66,201,138,0.25);
   pointer-events: none;
 }

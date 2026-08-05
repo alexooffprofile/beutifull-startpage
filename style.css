@@ -563,11 +563,11 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;  /* vertical center of shortcuts+search group */
-  gap: 20px;                /* gap between shortcuts row and search bar */
-  padding: 60px 0 80px;     /* top: room for clock; bottom: breathing space */
+  justify-content: center;
+  gap: 20px;
+  padding: 60px 0 80px;
   z-index: 1;
-  overflow: hidden;
+  overflow: visible;  /* не клипаем — body/html сами ограничивают */
 }
 
 /*
@@ -617,22 +617,70 @@ body.focused #clock-wrap { opacity:.3; transform:translateY(-4px); }
   flex-direction: row;
   align-items: center;
   gap: 14px;
-  overflow-x: hidden;   /* JS scrolls programmatically on wheel */
+  overflow-x: auto;
   overflow-y: visible;
-  width: min(1100px, 96%);
-  max-width: 96%;
+  width: 100%;
+  /* Ширина зоны регулируется слайдером "Zone width" в Settings → Shortcuts
+     (--sc-zone-width, JS: shortcuts.js applyZoneWidth). Без сохранённого
+     значения — почти во всю ширину экрана, с небольшими полями по бокам. */
+  max-width: var(--sc-zone-width, 94vw);
   flex-shrink: 0;
-  padding: 0 2px 2px;  /* tiny bottom padding so box-shadow isn't clipped */
-  /* Hidden by default while shortcuts.js initialises */
+  /* Большой padding для тени и lift */
+  padding: 20px 60px 24px;
+  scroll-padding-inline: 60px;
   opacity: 0;
-  transition: opacity var(--tr-s);
+  transition: opacity var(--tr-s), max-width var(--tr-s);
   position: relative;
   z-index: 5;
-  /* Fade edges to hint at horizontal scrollability */
-  mask-image: linear-gradient(to right, transparent 0%, black 24px, black calc(100% - 24px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 24px, black calc(100% - 24px), transparent 100%);
+  scrollbar-width: none;
+  box-sizing: border-box;
+  mask-image: linear-gradient(to right, transparent 0px, black 60px, black calc(100% - 60px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0px, black 60px, black calc(100% - 60px), transparent 100%);
 }
+#shortcuts-row::-webkit-scrollbar { display: none; }
 #shortcuts-row.sc-ready { opacity: 1; }
+
+/* Центрирование: псевдоэлементы flex:1 распирают контент к центру,
+   когда карточек мало. При переполнении они схлопываются — скролл работает.
+   Это дефолтное (center) поведение для однострочного (не-wrap) режима. */
+#shortcuts-row::before,
+#shortcuts-row::after {
+  content: '';
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+/* ── Row alignment (Settings → Shortcuts → Row alignment) ──────────
+   Однострочный режим: выравнивание достигается схлопыванием одного
+   из двух спейсеров-псевдоэлементов выше — content жмётся к
+   противоположному краю, скролл при переполнении продолжает работать
+   как обычно (в отличие от justify-content, который в скролл-контейнере
+   ведёт себя непредсказуемо между браузерами). */
+#shortcuts-row.sc-align-left:not(.sc-wrap)::before  { flex: 0 0 0; }
+#shortcuts-row.sc-align-right:not(.sc-wrap)::after   { flex: 0 0 0; }
+
+/* ── Wrap to multiple rows (Settings → Shortcuts → Wrap to multiple rows) ──
+   Переносим карточки на несколько строк вместо горизонтального скролла.
+   Спейсеры-псевдоэлементы больше не нужны (нет single-line оверфлоу),
+   выравнивание берёт на себя обычный justify-content на каждой строке. */
+#shortcuts-row.sc-wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 14px;
+  max-width: min(var(--sc-zone-width, 94vw), 100%);
+  padding: 20px 40px 24px;
+  scroll-padding-inline: 0;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+#shortcuts-row.sc-wrap::before,
+#shortcuts-row.sc-wrap::after { content: none; }
+#shortcuts-row.sc-wrap.sc-align-left   { justify-content: flex-start; }
+#shortcuts-row.sc-wrap.sc-align-center { justify-content: center; }
+#shortcuts-row.sc-wrap.sc-align-right  { justify-content: flex-end; }
+
+/* ── Enable shortcuts (Settings → Shortcuts → Enable shortcuts) ──── */
+html.sc-disabled #shortcuts-row { display: none !important; }
 
 /* ── Search wrap ── */
 /*
@@ -808,27 +856,34 @@ body:not(.focused)  ::selection { background: var(--accent-main-glow); } /* --ac
    Right-click a card → context menu → Change thumbnail.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Card ── */
+/* ── Card ──
+   --sc-radius / --sc-show-icon / --sc-show-title are set on :root by
+   shortcuts.js applyCardSettings() (Settings → Shortcuts → Shortcuts Type
+   → Large params). Fallbacks live in var(...) here rather than being
+   redeclared on .sc-card itself — a local redeclaration would shadow
+   whatever :root sets and the sliders/toggles would silently do nothing. */
 .sc-card {
   position: relative;
   flex-shrink: 0;
-  width: 320px;
-  height: 200px;
-  border-radius: 16px;
-  overflow: hidden;
+  width: 260px;
+  height: 158px;
+  border-radius: var(--sc-radius, 14px);
+  overflow: hidden;            /* карточка клипает всё внутри — bg, overlay, фавикон */
   cursor: pointer;
-  border: 1.5px solid var(--border);
+  border: 1px solid rgba(255,255,255,.07);
   background: var(--surface2);
   transition: border-color var(--tr-s), box-shadow var(--tr-s), transform var(--tr-s);
   user-select: none;
+  /* Lift не клипается здесь — клипает только родитель */
+  will-change: transform;
 }
 .sc-card:hover {
-  border-color: var(--border-focus);
-  box-shadow: 0 12px 40px rgba(0,0,0,.55);
-  transform: translateY(-2px);
+  border-color: rgba(255,255,255,.1);
+  box-shadow: 0 12px 36px rgba(0,0,0,.5);
+  transform: translateY(-4px);
 }
 
-/* ── Background image layer ── */
+/* ── Background layer — НЕТ своего border-radius/overflow, клипает sc-card ── */
 .sc-bg {
   position: absolute;
   inset: 0;
@@ -836,81 +891,202 @@ body:not(.focused)  ::selection { background: var(--accent-main-glow); } /* --ac
   background-position: center;
   background-repeat: no-repeat;
   transition: transform .4s ease;
+  z-index: 0;
 }
-.sc-card:hover .sc-bg { transform: scale(1.05); }
+.sc-card:hover .sc-bg { transform: scale(1.06); }
 
-/* ── Gradient overlay — always present so text is readable ── */
+/* ── Gradient overlay — без своего clip ── */
 .sc-overlay {
   position: absolute;
   inset: 0;
-  /* Gradient is stronger at bottom (where text sits) */
-  background: linear-gradient(
-    to bottom,
-    rgba(14,15,19,.25) 0%,
-    rgba(14,15,19,.55) 45%,
-    rgba(14,15,19,.92) 100%
-  );
+  background: linear-gradient(160deg, rgba(0,0,0,.06) 0%, rgba(0,0,0,.3) 45%, rgba(0,0,0,.78) 100%);
+  z-index: 1;
   transition: background var(--tr-s);
 }
-/* When a custom thumbnail is set the card gets data-has-thumb,
-   so we lighten the overlay a bit to let the image breathe */
 .sc-card[data-has-thumb="1"] .sc-overlay {
-  background: linear-gradient(
-    to bottom,
-    rgba(14,15,19,.08) 0%,
-    rgba(14,15,19,.38) 40%,
-    rgba(14,15,19,.88) 100%
-  );
+  background: linear-gradient(to bottom, rgba(14,15,19,.04) 0%, rgba(14,15,19,.3) 42%, rgba(14,15,19,.88) 100%);
 }
 
-/* ── Favicon ── */
-.sc-favicon {
+/* ── Corner favicon (top-left) — 6: hidden via --sc-show-icon ── */
+.sc-fav-center {
   position: absolute;
-  top: 12px;
-  left: 14px;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 26px;
+  height: 26px;
+  top: 11px;
+  left: 12px;
   object-fit: contain;
-  opacity: .9;
-  z-index: 1;
+  border-radius: 7px;
+  z-index: 3;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
+  transition: transform .22s ease, opacity .2s;
+  opacity: calc(var(--sc-show-icon, 1));
+  pointer-events: none;
 }
+.sc-card:hover .sc-fav-center { transform: scale(1.08); }
 
-/* ── Info block (title + domain) ── */
+/* ── Ghost favicon (blurred bg decoration) ── */
+.sc-fav-ghost {
+  position: absolute;
+  width: 84px;
+  height: 84px;
+  top: 44%;
+  left: 67%;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+  border-radius: 18px;
+  z-index: 1;
+  opacity: .1;
+  filter: blur(7px) saturate(1.6);
+  pointer-events: none;
+  transition: opacity .3s;
+}
+.sc-card:hover .sc-fav-ghost { opacity: .17; }
+/* Ghost скрывается когда установлена картинка (управляется JS через style.display) */
+
+/* ── Info block ── */
 .sc-info {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  padding: 12px 14px 14px;
-  z-index: 1;
+  padding: 9px 12px 11px;
+  z-index: 3;
+  border-radius: 0 0 var(--sc-radius, 14px) var(--sc-radius, 14px);
+  overflow: hidden;
 }
+
+/* ── Title — 6: скрывается через --sc-show-title ── */
 .sc-title {
-  font-size: .95rem;
-  font-weight: 400;
-  color: var(--text);
+  font-size: .85rem;
+  font-weight: 500;
+  color: rgba(255,255,255,.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.3;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
+  opacity: calc(var(--sc-show-title, 1));
+  transition: opacity .2s;
+  /* если title скрыт — убираем отступ */
+  height: calc(1.3em * var(--sc-show-title, 1));
+  margin-bottom: calc(2px * var(--sc-show-title, 1));
 }
+
+/* ── Domain — 5: скрыта в обычном состоянии, видна при hover ── */
 .sc-domain {
-  font-size: .72rem;
-  color: var(--text-muted);
+  font-size: .66rem;
+  color: rgba(255,255,255,.5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: .02em;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity .2s ease, transform .2s ease;
+}
+.sc-card:hover .sc-domain {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* ── Hint shown when shortcuts folder is empty ── */
+/* ── Hint when row is empty ── */
 .sc-hint {
-  font-size: .82rem;
+  font-size: .78rem;
   color: var(--text-muted);
+  opacity: .45;
   text-align: center;
   padding: 0 20px;
   line-height: 1.6;
 }
-.sc-hint b { color: var(--text-dim); font-weight: 500; }
+
+/* ══ Shortcut edit / add popup ══════════════════════════════════ */
+.sc-edit-popup {
+  position: fixed;
+  z-index: 9999;
+  background: var(--surface2);
+  border: 1px solid var(--border-focus);
+  border-radius: 13px;
+  padding: 15px 16px;
+  width: 290px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.7);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  animation: scPopIn .13s ease both;
+}
+@keyframes scPopIn {
+  from { opacity:0; transform:translateY(-5px) scale(.97); }
+  to   { opacity:1; transform:none; }
+}
+.sc-edit-header { display: flex; align-items: center; justify-content: space-between; }
+.sc-edit-heading { font-size: .81rem; font-weight: 600; color: var(--text); letter-spacing: .02em; }
+.sc-edit-close {
+  background: none; border: none; padding: 3px; color: var(--text-muted);
+  cursor: pointer; border-radius: 5px; display: flex; align-items: center;
+  transition: color var(--tr-s), background var(--tr-s);
+}
+.sc-edit-close:hover { color: var(--text); background: var(--surface3); }
+.sc-edit-fields { display: flex; flex-direction: column; gap: 7px; }
+.sc-edit-field { display: flex; flex-direction: column; gap: 3px; }
+.sc-edit-field > span { font-size: .67rem; color: var(--text-muted); letter-spacing: .03em; }
+.sc-edit-input {
+  background: var(--surface3); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; font-size: .79rem; font-family: 'DM Sans', sans-serif;
+  color: var(--text); outline: none; box-sizing: border-box; width: 100%;
+  transition: border-color var(--tr-s);
+}
+.sc-edit-input:focus { border-color: var(--border-focus); }
+.sc-edit-input::placeholder { color: var(--text-muted); opacity: .45; }
+
+/* ── Image preview area ── */
+.sc-edit-img-wrap { display: flex; flex-direction: column; gap: 7px; }
+.sc-edit-preview {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--tr-s);
+}
+.sc-edit-preview.has-thumb { border-color: var(--border-focus); }
+.sc-edit-preview-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  display: none;
+}
+.sc-edit-preview.has-thumb .sc-edit-preview-img { display: block; }
+.sc-edit-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: .68rem;
+  color: var(--text-muted);
+  opacity: .4;
+}
+.sc-edit-preview.has-thumb .sc-edit-preview-empty { display: none; }
+.sc-edit-img-btns { display: flex; gap: 6px; }
+
+.sc-edit-actions { display: flex; justify-content: space-between; align-items: center; }
+.sc-edit-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface3); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 12px; font-size: .74rem; font-family: 'DM Sans', sans-serif;
+  color: var(--text-muted); cursor: pointer; white-space: nowrap;
+  transition: color var(--tr-s), border-color var(--tr-s), background var(--tr-s);
+}
+.sc-edit-btn:hover { color: var(--text); border-color: var(--border-focus); }
+.sc-edit-save-btn { background: var(--accent-main-glow); border-color: var(--accent-main); color: var(--accent-main); margin-left: auto; }
+.sc-edit-save-btn:hover { background: var(--accent-main); color: #fff; }
+.sc-edit-del-btn { color: #ff7e7e; border-color: rgba(255,126,126,.22); background: rgba(255,126,126,.07); }
+.sc-edit-del-btn:hover { background: rgba(255,126,126,.18); border-color: #ff7e7e; }
 
 /* ── Context menu (right-click) ── */
 /* ── Global custom context menu ── */
@@ -2078,7 +2254,11 @@ body:not(.focused)  ::selection { background: var(--accent-main-glow); } /* --ac
   justify-content: center;
 }
 
-/* ── Slider control (panel width etc.) ── */
+/* ── Slider control (panel width etc.) ──
+   Shared by every slider in Settings (buildSlider + wpSlider both use
+   .bnt-s-slider-wrap), so any change here updates all of them at once.
+   --range-fill is set by JS on init + on 'input' to draw the filled
+   portion of the track up to the current value. */
 .bnt-s-slider-wrap {
   display: flex;
   align-items: center;
@@ -2089,25 +2269,64 @@ body:not(.focused)  ::selection { background: var(--accent-main-glow); } /* --ac
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border);
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    var(--accent-main) 0%, var(--accent-main) var(--range-fill, 50%),
+    var(--border) var(--range-fill, 50%), var(--border) 100%);
   outline: none;
   cursor: pointer;
   accent-color: var(--accent-main);
+  transition: box-shadow .15s;
 }
+.bnt-s-slider-wrap input[type="range"]:hover {
+  box-shadow: 0 0 0 4px var(--accent-main-glow-sm, var(--accent-main-glow));
+}
+.bnt-s-slider-wrap input[type="range"]:focus-visible {
+  box-shadow: 0 0 0 4px var(--accent-main-glow);
+}
+/* Thumb — WebKit / Blink */
 .bnt-s-slider-wrap input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: var(--accent-main);
+  border: 2px solid var(--bg);
   cursor: pointer;
-  box-shadow: 0 0 4px var(--accent-main-glow);
-  transition: transform .15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  transition: transform .15s, box-shadow .15s;
 }
 .bnt-s-slider-wrap input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+  transform: scale(1.18);
+  box-shadow: 0 1px 6px rgba(0,0,0,.5), 0 0 0 5px var(--accent-main-glow);
+}
+.bnt-s-slider-wrap input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.05);
+}
+/* Thumb / track — Firefox */
+.bnt-s-slider-wrap input[type="range"]::-moz-range-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+}
+.bnt-s-slider-wrap input[type="range"]::-moz-range-progress {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--accent-main);
+}
+.bnt-s-slider-wrap input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent-main);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  transition: transform .15s, box-shadow .15s;
+}
+.bnt-s-slider-wrap input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.18);
 }
 .bnt-s-slider-val {
   font-size: .75rem;
@@ -2870,6 +3089,70 @@ body:not(.focused)  ::selection { background: var(--accent-main-glow); } /* --ac
   border-radius: 4px; padding: 0 4px; color: var(--text-muted);
   margin-left: 5px; vertical-align: middle;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SHORTCUTS TYPE — centered segmented switch (Large | Small)
+   Unlike .bnt-s-pill-group (separate pill buttons), the buttons here
+   are visually merged into a single rounded control.
+══════════════════════════════════════════════════════════════ */
+.bnt-s-row--type-select {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 6px 12px;
+  text-align: center;
+}
+.bnt-s-type-select-title {
+  font-size: .85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.bnt-s-segmented {
+  display: inline-flex;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+.bnt-s-segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: .78rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--tr-s), color var(--tr-s);
+}
+.bnt-s-segmented-btn:hover:not(.active) { color: var(--text); }
+.bnt-s-segmented-btn.active {
+  background: var(--accent-main-glow);
+  color: var(--accent-main);
+}
+.bnt-s-type-note {
+  font-size: .72rem;
+  color: var(--text-muted);
+  max-width: 300px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Params for whichever type is active — full-width block, normal
+   left-aligned rows, even though the switch above it is centered. */
+.bnt-s-type-params-wrap {
+  align-self: stretch;
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.bnt-s-type-params { display: flex; flex-direction: column; }
+.bnt-s-type-params .bnt-s-type-note { max-width: none; padding: 6px 0; }
 
 /* ══════════════════════════════════════════════════════════════
    WALLPAPER PREVIEW CANVAS

@@ -1172,12 +1172,12 @@
       }
     });
 
-    /* Right click → edit popup */
-    card.addEventListener('contextmenu', e => {
-      if (e.target.closest('.bm-card-copy,.bm-card-tag-btn,.bm-card-del,.bm-card-edit-btn')) return;
-      e.preventDefault();
-      openCardEditPopup(node, card, S.getMeta(node.id));
-    });
+    /* Right click → handled globally by context-menu.js, which shows the
+       custom context menu and triggers openCardEditPopup via the hidden
+       edit button below ("Edit bookmark" item → editBtn.click()). Do NOT
+       add a contextmenu listener here — it used to open this popup
+       directly, which fired alongside the custom menu and opened both
+       at once. */
 
     /* Edit button */
     const editBtn = document.createElement('button'); editBtn.className = 'bm-card-edit-btn'; editBtn.title = 'Edit bookmark';
@@ -1485,6 +1485,28 @@
       inp.click();
     });
 
+    const thumbPasteBtn = document.createElement('button'); thumbPasteBtn.className = 'bm-cep-thumb-pick bm-cep-thumb-paste';
+    thumbPasteBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Paste`;
+    thumbPasteBtn.title = 'Paste image from clipboard';
+    thumbPasteBtn.addEventListener('click', async () => {
+      let raw;
+      try {
+        raw = await S.readClipboardImage();
+      } catch (e) {
+        console.error('[BNT BM] clipboard read failed', e);
+        window.BNT_TOAST?.show({ title: 'Could not read clipboard', type: 'error', duration: 2200 });
+        return;
+      }
+      if (!raw) {
+        window.BNT_TOAST?.show({ title: 'No image in clipboard', type: 'error', duration: 2200 });
+        return;
+      }
+      editThumbBlob = await S.compressImage(raw); thumbCleared = false;
+      const url = URL.createObjectURL(editThumbBlob);
+      thumbImg.src = url; thumbImg.style.display = 'block'; thumbEmpty.style.display = 'none';
+      window.BNT_TOAST?.show({ title: 'Image pasted', type: 'success', duration: 1800 });
+    });
+
     const thumbClearBtn = document.createElement('button'); thumbClearBtn.className = 'bm-cep-thumb-clear';
     thumbClearBtn.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
     thumbClearBtn.title = 'Remove thumbnail';
@@ -1493,7 +1515,7 @@
       thumbImg.src = ''; thumbImg.style.display = 'none'; thumbEmpty.style.display = '';
     });
 
-    thumbRow.append(thumbPreview, thumbPickBtn, thumbClearBtn);
+    thumbRow.append(thumbPreview, thumbPickBtn, thumbPasteBtn, thumbClearBtn);
 
     /* Buttons */
     const btnRow = document.createElement('div'); btnRow.className = 'bm-cep-btns';

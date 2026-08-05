@@ -24,10 +24,11 @@
   /* ══════════════════════════════════════════════════════════════
      STATE
   ══════════════════════════════════════════════════════════════ */
-  let images        = [];   /* string[] — URLs from background */
+  let images        = [];
   let imageIndex    = 0;
-  let selectedThumb = null; /* data-url | external URL | null */
-  let promptData    = null; /* last BNT_SHOW_PROMPT payload */
+  let selectedThumb = null;
+  let promptData    = null;
+  let _destination  = 'bookmarks'; /* 'bookmarks' | 'shortcuts' */
 
   /* ══════════════════════════════════════════════════════════════
      BUILD DOM
@@ -55,7 +56,58 @@
   </svg>`;
   closeBtn.addEventListener('click', removePrompt);
 
-  header.append(label, closeBtn);
+  const copyLinkBtn = document.createElement('button');
+  copyLinkBtn.id = 'bnt-copy-link';
+  copyLinkBtn.title = 'Copy link';
+  copyLinkBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </svg>`;
+  copyLinkBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(promptData?.url || '');
+      copyLinkBtn.classList.add('bnt-copy-ok');
+      copyLinkBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      setTimeout(() => {
+        copyLinkBtn.classList.remove('bnt-copy-ok');
+        copyLinkBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+      }, 1800);
+    } catch {}
+  });
+
+  header.append(label, copyLinkBtn, closeBtn);
+
+  /* ── Destination selector ── */
+  const destRow = document.createElement('div');
+  destRow.id = 'bnt-dest-row';
+
+  const destBm = document.createElement('button');
+  destBm.className = 'bnt-dest-btn bnt-dest-active';
+  destBm.dataset.dest = 'bookmarks';
+  destBm.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> To Bookmarks`;
+
+  const destSc = document.createElement('button');
+  destSc.className = 'bnt-dest-btn';
+  destSc.dataset.dest = 'shortcuts';
+  destSc.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="8" height="8" rx="1"/><rect x="14" y="13" width="8" height="8" rx="1"/><rect x="8" y="2" width="8" height="8" rx="1"/></svg> To Shortcuts`;
+
+  function setDest(d) {
+    _destination = d;
+    destBm.classList.toggle('bnt-dest-active', d === 'bookmarks');
+    destSc.classList.toggle('bnt-dest-active', d === 'shortcuts');
+    tagsWrap.style.display = d === 'shortcuts' ? 'none' : '';
+    updateAddBtn();
+  }
+  destBm.addEventListener('click', () => setDest('bookmarks'));
+  destSc.addEventListener('click', () => setDest('shortcuts'));
+
+  function updateAddBtn() {
+    const isEdit = !!promptData?.existingMeta;
+    if (isEdit) { addBtn.textContent = 'Save Changes'; return; }
+    addBtn.textContent = _destination === 'shortcuts' ? 'Add to Shortcuts' : 'Add to Home Page';
+  }
+
+  destRow.append(destBm, destSc);
 
   /* ── Title input ── */
   const titleInput = document.createElement('input');
@@ -120,13 +172,57 @@
   preview.append(thumbImg, thumbEmpty, counter, uploadBtn);
   thumbRow.append(prevBtn, preview, nextBtn);
 
+  /* ── Tags input (bookmarks only) ── */
+  const tagsWrap = document.createElement('div');
+  tagsWrap.id = 'bnt-tags-wrap';
+
+  const tagsInput = document.createElement('input');
+  tagsInput.id = 'bnt-tags-input';
+  tagsInput.type = 'text';
+  tagsInput.placeholder = 'Tags: work, design, ref…';
+  tagsInput.autocomplete = 'off';
+  tagsInput.spellcheck = false;
+
+  /* Tag pills rendered here */
+  const tagsPills = document.createElement('div');
+  tagsPills.id = 'bnt-tags-pills';
+
+  let _tags = []; /* string[] */
+
+  function renderTagPills() {
+    tagsPills.innerHTML = '';
+    _tags.forEach((tag, i) => {
+      const pill = document.createElement('span');
+      pill.className = 'bnt-tag-pill';
+      pill.innerHTML = `${tag}<button class="bnt-tag-rm" data-i="${i}" title="Remove">×</button>`;
+      pill.querySelector('.bnt-tag-rm').addEventListener('click', () => {
+        _tags.splice(i, 1); renderTagPills();
+      });
+      tagsPills.appendChild(pill);
+    });
+  }
+
+  tagsInput.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ',') && tagsInput.value.trim()) {
+      e.preventDefault();
+      const val = tagsInput.value.trim().replace(/,+$/, '');
+      if (val && !_tags.includes(val)) { _tags.push(val); renderTagPills(); }
+      tagsInput.value = '';
+    }
+    if (e.key === 'Backspace' && !tagsInput.value && _tags.length) {
+      _tags.pop(); renderTagPills();
+    }
+  });
+
+  tagsWrap.append(tagsPills, tagsInput);
+
   /* ── Add button ── */
   const addBtn = document.createElement('button');
   addBtn.id = 'bnt-prompt-add';
   addBtn.textContent = 'Add to Home Page';
   addBtn.addEventListener('click', handleAdd);
 
-  card.append(header, titleInput, urlDisplay, thumbRow, addBtn);
+  card.append(header, destRow, titleInput, urlDisplay, tagsWrap, thumbRow, addBtn);
   root.appendChild(card);
 
   /* ══════════════════════════════════════════════════════════════
@@ -212,14 +308,17 @@
     images       = (data.images || []).slice();
     imageIndex   = 0;
     selectedThumb = null;
+    _destination  = 'bookmarks';
+    _tags         = [];
+    renderTagPills();
+    setDest('bookmarks');
 
-    titleInput.value  = data.title || '';
-    urlDisplay.textContent = data.url || '';
+    titleInput.value       = data.title || '';
+    urlDisplay.textContent = data.url   || '';
 
-    /* If already on newtab panel — change label and button text */
     const isEdit = !!data.existingMeta;
-    label.textContent  = isEdit ? 'Edit Bookmark' : 'Add to New Tab';
-    addBtn.textContent = isEdit ? 'Save Changes'  : 'Add to Home Page';
+    label.textContent = isEdit ? 'Edit Bookmark' : 'Add to New Tab';
+    updateAddBtn();
 
     renderThumb();
     titleInput.focus();
@@ -259,16 +358,17 @@
       title,
       url:          promptData.url,
       thumbDataUrl,
+      tags:         _destination === 'bookmarks' ? _tags : [],
+      destination:  _destination,
       isEdit:       !!promptData.existingMeta,
     }, response => {
       if (response?.ok) {
-        /* Success feedback then auto-close */
         card.classList.add('bnt-success');
-        addBtn.textContent = '✓ Added';
+        addBtn.textContent = _destination === 'shortcuts' ? '✓ Added to Shortcuts' : '✓ Added';
         setTimeout(removePrompt, 900);
       } else {
         addBtn.disabled    = false;
-        addBtn.textContent = promptData.existingMeta ? 'Save Changes' : 'Add to Home Page';
+        updateAddBtn();
         console.warn('[BNT] Add to panel failed:', response?.error);
       }
     });

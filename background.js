@@ -354,9 +354,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 });
 
-async function handleAddToPanel({ bookmarkId, title, url, thumbDataUrl, isEdit }) {
+async function handleAddToPanel({ bookmarkId, title, url, thumbDataUrl, isEdit, destination }) {
   const folders = await getFolderIds();
   if (!folders) return { ok: false, error: 'Folders not ready' };
+
+  /* Determine target folder — shortcuts or bookmarks panel */
+  const targetFolder = destination === 'shortcuts' ? folders.scId : folders.bmId;
 
   let targetId = bookmarkId;
 
@@ -366,18 +369,19 @@ async function handleAddToPanel({ bookmarkId, title, url, thumbDataUrl, isEdit }
         chrome.runtime.lastError ? reject(chrome.runtime.lastError) : resolve(node);
       });
     });
+    /* If destination changed, move the bookmark to the right folder */
+    if (destination === 'shortcuts') {
+      await new Promise(resolve => chrome.bookmarks.move(bookmarkId, { parentId: targetFolder }, resolve));
+    }
   } else {
     const created = await new Promise((resolve, reject) => {
-      chrome.bookmarks.create({ parentId: folders.bmId, title, url }, node => {
+      chrome.bookmarks.create({ parentId: targetFolder, title, url }, node => {
         chrome.runtime.lastError ? reject(chrome.runtime.lastError) : resolve(node);
       });
     });
     targetId = created.id;
   }
 
-  /* Store thumb dataUrl in chrome.storage.local temporarily so newtab
-     can pick it up, convert to Blob, and save to IndexedDB.
-     Key: bnt_pending_thumb_{id}, cleaned up by bookmarks.js after use. */
   if (thumbDataUrl && targetId) {
     await new Promise(resolve => {
       chrome.storage.local.set({ [`bnt_pending_thumb_${targetId}`]: thumbDataUrl }, resolve);

@@ -9,3 +9,5 @@ dist/
 *.zip
 .env
 *.bat
+
+WIDGETS_TODO.md

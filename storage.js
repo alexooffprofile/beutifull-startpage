@@ -142,6 +142,12 @@
     return {
       groupMode:     'none',
       panelWidthPct: 32,
+      /* Shortcuts row (kept in sync with settings.js SETTINGS_CONFIG) */
+      scZoneWidthPct: 94,
+      scRowAlign:     'center',
+      scWrapRows:     false,
+      scEnabled:      true,
+      scType:         'large',
     };
   }
 
@@ -495,6 +501,22 @@
         img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('Image load failed')); };
         img.src = objUrl;
       });
+    }
+
+    /**
+     * Read an image from the OS clipboard (Async Clipboard API).
+     * Shared by shortcut/bookmark "Paste image" actions.
+     * @returns {Promise<Blob|null>} image blob, or null if clipboard has no image
+     * @throws if clipboard access is unavailable or denied by the browser
+     */
+    async readClipboardImage() {
+      if (!navigator.clipboard?.read) throw new Error('Clipboard API unavailable');
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find(t => t.startsWith('image/'));
+        if (imgType) return await item.getType(imgType);
+      }
+      return null;
     }
 
     /* ────────────────────────────────────────────────────────────

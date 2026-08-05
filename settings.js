@@ -89,6 +89,41 @@
     CLOSE_DELAY_MAX     : 800,
     CLOSE_DELAY_DEFAULT : 110,
 
+    /**
+     * Ширина зоны шорткатов (vw — проценты от ширины viewport).
+     * Слайдер "Zone width" в категории Shortcuts.
+     *   MIN_VW  — минимально возможная ширина (компактный ряд)
+     *   MAX_VW  — максимально возможная ширина (почти во весь экран)
+     *   DEFAULT — значение при первом запуске / сбросе
+     */
+    SC_ZONE_WIDTH_MIN_VW  : 40,
+    SC_ZONE_WIDTH_MAX_VW  : 98,
+    SC_ZONE_WIDTH_DEFAULT : 94,
+
+    /**
+     * Выравнивание ряда шорткатов внутри зоны (Settings → Shortcuts → Row alignment).
+     * 'left' | 'center' | 'right'
+     */
+    SC_ROW_ALIGN_DEFAULT : 'center',
+
+    /**
+     * Перенос карточек на несколько строк вместо горизонтального скролла.
+     * Settings → Shortcuts → Wrap to multiple rows.
+     */
+    SC_WRAP_ROWS_DEFAULT : false,
+
+    /**
+     * Показывать ли ряд шорткатов вообще.
+     * Settings → Shortcuts → Enable shortcuts.
+     */
+    SC_ENABLED_DEFAULT : true,
+
+    /**
+     * Тип карточек шорткатов. 'large' — единственный реализованный на
+     * сегодня вариант. 'small' — заглушка, UI есть, логики ещё нет.
+     */
+    SC_TYPE_DEFAULT : 'large',
+
   };
 
   /**
@@ -107,6 +142,11 @@
       panelBg        : SETTINGS_CONFIG.PANEL_BG_DEFAULT,
       cardRadius     : SETTINGS_CONFIG.CARD_RADIUS_DEFAULT,
       closeDelay     : SETTINGS_CONFIG.CLOSE_DELAY_DEFAULT,
+      scZoneWidthPct : SETTINGS_CONFIG.SC_ZONE_WIDTH_DEFAULT,
+      scRowAlign     : SETTINGS_CONFIG.SC_ROW_ALIGN_DEFAULT,
+      scWrapRows     : SETTINGS_CONFIG.SC_WRAP_ROWS_DEFAULT,
+      scEnabled      : SETTINGS_CONFIG.SC_ENABLED_DEFAULT,
+      scType         : SETTINGS_CONFIG.SC_TYPE_DEFAULT,
     };
   }
 
@@ -168,7 +208,10 @@
         {
           title: 'Shortcuts Row',
           rows: [
-            { icon: 'grid',    label: 'Card size',        desc: 'Width and height of shortcut cards' },
+            { icon: 'grid',    label: 'Card size',         desc: 'Width and height of shortcut cards' },
+            { icon: 'eye',     label: 'Border radius',     desc: 'Corner roundness of shortcut cards',   key: 'sc_radius',     type: 'slider',  min: 0, max: 28, step: 2, default: 14, unit: 'px' },
+            { icon: 'image',   label: 'Show site icon',    desc: 'Display favicon in top-left corner',   key: 'sc_show_icon',  type: 'toggle',  default: true },
+            { icon: 'eye',     label: 'Show title',        desc: 'Display shortcut name on card',        key: 'sc_show_title', type: 'toggle',  default: true },
           ],
         },
       ],
@@ -232,6 +275,27 @@
           title: 'Tags',
           rows: [
             { icon: 'tag',    label: 'Auto-create site tags', desc: 'Automatically tag bookmarks by their domain' },
+          ],
+        },
+      ],
+    },
+    {
+      id:    'shortcuts',
+      label: 'Shortcuts',
+      icon:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
+      sections: [
+        {
+          rows: [
+            { icon: 'grid',    label: 'Enable shortcuts',     desc: 'Show or hide the shortcuts row on the new tab page' },
+            { icon: 'sliders', label: 'Shortcuts Type',       desc: '' },
+          ],
+        },
+        {
+          title: 'Zone Layout',
+          rows: [
+            { icon: 'sliders', label: 'Zone width',           desc: 'How wide the shortcuts row expands across the page' },
+            { icon: 'grid',    label: 'Row alignment',        desc: 'Align the shortcuts row to the left, center, or right' },
+            { icon: 'eye',     label: 'Wrap to multiple rows', desc: 'Allow shortcuts to wrap onto a second row instead of scrolling' },
           ],
         },
       ],
@@ -667,9 +731,16 @@
     const slider = wrap.querySelector('input');
     const valEl  = wrap.querySelector('.bnt-s-slider-val');
 
+    const fill = () => {
+      const pct = ((Number(slider.value) - min) / (max - min || 1)) * 100;
+      slider.style.setProperty('--range-fill', pct + '%');
+    };
+    fill();
+
     slider.addEventListener('input', () => {
       const v = Number(slider.value);
       valEl.textContent = v + unit;
+      fill();
       window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { [storageKey]: v } }));
       if (onChange) onChange(v);
     });
@@ -723,8 +794,14 @@
     wrap.innerHTML = `<input type="range" min="${min}" max="${max}" step="1" value="${val}"><span class="bnt-s-slider-val">${val}${unit}</span>`;
     const input = wrap.querySelector('input');
     const valEl = wrap.querySelector('.bnt-s-slider-val');
+    const fill = () => {
+      const pct = ((Number(input.value) - min) / (max - min || 1)) * 100;
+      input.style.setProperty('--range-fill', pct + '%');
+    };
+    fill();
     input.addEventListener('input', () => {
       valEl.textContent = input.value + unit;
+      fill();
       if (onInput) onInput(Number(input.value));
     });
     return wrap;
@@ -914,6 +991,131 @@
     });
     row.appendChild(pg);
     return row;
+  }
+
+  /**
+   * Plain .bnt-s-row toggle backed directly by localStorage (matches the
+   * sc_radius / sc_show_icon / sc_show_title convention already read by
+   * shortcuts.js applyCardSettings(), dispatched via the hyphenated
+   * 'bnt-settings-changed' event it already listens for).
+   */
+  function scLocalToggleRow(iconKey, label, desc, key, defaultVal) {
+    const current = (localStorage.getItem(key) ?? String(defaultVal)) === 'true';
+    const el = document.createElement('div');
+    el.className = 'bnt-s-row';
+    el.innerHTML = `
+      <span class="bnt-s-row-ico">${ICO[iconKey] || ''}</span>
+      <div class="bnt-s-row-label"><span>${label}</span><span class="bnt-s-row-desc">${desc}</span></div>
+    `;
+    const toggle = document.createElement('label');
+    toggle.className = 'bnt-s-toggle bnt-s-control';
+    toggle.innerHTML = `<input type="checkbox" ${current ? 'checked' : ''}><span class="bnt-s-toggle-track"></span><span class="bnt-s-toggle-thumb"></span>`;
+    toggle.querySelector('input').addEventListener('change', e => {
+      localStorage.setItem(key, e.target.checked ? 'true' : 'false');
+      window.dispatchEvent(new CustomEvent('bnt-settings-changed', { detail: { key } }));
+    });
+    el.appendChild(toggle);
+    return el;
+  }
+
+  /** Same idea as scLocalToggleRow but for a numeric slider. */
+  function scLocalSliderRow(iconKey, label, desc, key, min, max, defaultVal, unit) {
+    const current = Number(localStorage.getItem(key) ?? defaultVal);
+    const el = document.createElement('div');
+    el.className = 'bnt-s-row';
+    el.innerHTML = `
+      <span class="bnt-s-row-ico">${ICO[iconKey] || ''}</span>
+      <div class="bnt-s-row-label"><span>${label}</span><span class="bnt-s-row-desc">${desc}</span></div>
+    `;
+    const wrap = document.createElement('div');
+    wrap.className = 'bnt-s-control bnt-s-slider-wrap';
+    wrap.innerHTML = `<input type="range" min="${min}" max="${max}" step="1" value="${current}"><span class="bnt-s-slider-val">${current}${unit}</span>`;
+    const slider = wrap.querySelector('input');
+    const valEl  = wrap.querySelector('.bnt-s-slider-val');
+    const fill = () => slider.style.setProperty('--range-fill', ((slider.value - min) / (max - min || 1)) * 100 + '%');
+    fill();
+    slider.addEventListener('input', () => {
+      valEl.textContent = slider.value + unit;
+      fill();
+      localStorage.setItem(key, slider.value);
+      window.dispatchEvent(new CustomEvent('bnt-settings-changed', { detail: { key } }));
+    });
+    el.appendChild(wrap);
+    return el;
+  }
+
+  /** Params shown under "Shortcuts Type" for the currently selected type. */
+  function scTypeParams(type) {
+    const c = document.createElement('div');
+    c.className = 'bnt-s-type-params';
+    if (type === 'large') {
+      c.appendChild(scLocalToggleRow('image', 'Show site icon', 'Display favicon in top-left corner', 'sc_show_icon', true));
+      c.appendChild(scLocalToggleRow('eye',   'Show title',     'Display shortcut name on card',      'sc_show_title', true));
+      c.appendChild(scLocalSliderRow('eye',   'Border radius',  'Corner roundness of shortcut cards',  'sc_radius', 0, 28, 14, 'px'));
+    } else {
+      const note = document.createElement('div');
+      note.className = 'bnt-s-type-note';
+      note.textContent = 'Small shortcuts aren\u2019t built yet — no parameters to show here yet.';
+      c.appendChild(note);
+    }
+    return c;
+  }
+
+  /**
+   * Centered "Shortcuts Type" block: title on its own line, a merged
+   * (segmented) Large/Small switch below it, both centered, and below
+   * that the parameters for whichever type is currently active — they
+   * swap live when the switch is clicked. Returns a DocumentFragment
+   * containing a single self-contained .bnt-s-row so buildRow() doesn't
+   * re-wrap it with the usual left icon/label layout.
+   */
+  function buildShortcutsTypeRow() {
+    const S = window.BNT_STORAGE;
+    let current = S ? (S.getSettings().scType ?? SETTINGS_CONFIG.SC_TYPE_DEFAULT) : SETTINGS_CONFIG.SC_TYPE_DEFAULT;
+
+    const frag = document.createDocumentFragment();
+
+    const row = document.createElement('div');
+    row.className = 'bnt-s-row bnt-s-row--type-select';
+
+    const title = document.createElement('div');
+    title.className = 'bnt-s-type-select-title';
+    title.textContent = 'Shortcuts Type';
+    row.appendChild(title);
+
+    const seg = document.createElement('div');
+    seg.className = 'bnt-s-segmented';
+
+    const paramsWrap = document.createElement('div');
+    paramsWrap.className = 'bnt-s-type-params-wrap';
+    paramsWrap.appendChild(scTypeParams(current));
+
+    const TYPES = [
+      { id: 'large', label: 'Large' },
+      { id: 'small', label: 'Small' },
+    ];
+
+    TYPES.forEach(t => {
+      const btn = document.createElement('button');
+      btn.className = 'bnt-s-segmented-btn' + (t.id === current ? ' active' : '');
+      btn.textContent = t.label;
+      btn.addEventListener('click', async () => {
+        if (t.id === current) return;
+        current = t.id;
+        seg.querySelectorAll('.bnt-s-segmented-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        paramsWrap.innerHTML = '';
+        paramsWrap.appendChild(scTypeParams(current));
+        if (S) await S.updateSettings({ scType: current });
+        window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { scType: current } }));
+      });
+      seg.appendChild(btn);
+    });
+
+    row.appendChild(seg);
+    row.appendChild(paramsWrap);
+    frag.appendChild(row);
+    return frag;
   }
 
   /* Build the type-selector dropdown control (standard bnt-s-control) */
@@ -1468,6 +1670,56 @@
       return buildSlider('closeDelay', CLOSE_DELAY_MIN, CLOSE_DELAY_MAX, CLOSE_DELAY_DEFAULT, 'ms');
     }
 
+    /* ── Shortcuts ── */
+    if (row.label === 'Zone width') {
+      const { SC_ZONE_WIDTH_MIN_VW, SC_ZONE_WIDTH_MAX_VW, SC_ZONE_WIDTH_DEFAULT } = SETTINGS_CONFIG;
+      return buildSlider('scZoneWidthPct', SC_ZONE_WIDTH_MIN_VW, SC_ZONE_WIDTH_MAX_VW, SC_ZONE_WIDTH_DEFAULT, '%', v => {
+        document.documentElement.style.setProperty('--sc-zone-width', v + 'vw');
+      });
+    }
+
+    if (row.label === 'Row alignment') {
+      const S = window.BNT_STORAGE;
+      const current = S ? (S.getSettings().scRowAlign ?? SETTINGS_CONFIG.SC_ROW_ALIGN_DEFAULT) : SETTINGS_CONFIG.SC_ROW_ALIGN_DEFAULT;
+      const opts = [
+        { id: 'left',   label: 'Left' },
+        { id: 'center', label: 'Center' },
+        { id: 'right',  label: 'Right' },
+      ];
+      const pillRow = buildPillSelectRow(
+        'grid', 'Row alignment', 'Align the shortcuts row to the left, center, or right',
+        opts, opts.findIndex(o => o.id === current),
+        async (opt) => {
+          const sc = document.getElementById('shortcuts-row');
+          if (sc) {
+            sc.classList.remove('sc-align-left', 'sc-align-center', 'sc-align-right');
+            sc.classList.add('sc-align-' + opt.id);
+          }
+          if (S) await S.updateSettings({ scRowAlign: opt.id });
+          window.dispatchEvent(new CustomEvent('bnt:settings-changed', { detail: { scRowAlign: opt.id } }));
+        }
+      );
+      const frag = document.createDocumentFragment();
+      frag.appendChild(pillRow);
+      return frag;
+    }
+
+    if (row.label === 'Enable shortcuts') {
+      return buildToggle('scEnabled', SETTINGS_CONFIG.SC_ENABLED_DEFAULT, v => {
+        document.documentElement.classList.toggle('sc-disabled', !v);
+      });
+    }
+
+    if (row.label === 'Shortcuts Type') {
+      return buildShortcutsTypeRow();
+    }
+
+    if (row.label === 'Wrap to multiple rows') {
+      return buildToggle('scWrapRows', SETTINGS_CONFIG.SC_WRAP_ROWS_DEFAULT, v => {
+        document.getElementById('shortcuts-row')?.classList.toggle('sc-wrap', v);
+      });
+    }
+
     /* ── Themes & Colors ── */
     if (row.label === 'Main accent') {
       return buildColorPicker('accentMain', SETTINGS_CONFIG.ACCENT_MAIN_DEFAULT, '--accent-main', applyAccentMain);
@@ -1588,7 +1840,7 @@
           if (
             row.label.toLowerCase().includes(q) ||
             (row.desc || '').toLowerCase().includes(q) ||
-            sec.title.toLowerCase().includes(q)
+            (sec.title || '').toLowerCase().includes(q)
           ) {
             matchRows.push(row);
           }

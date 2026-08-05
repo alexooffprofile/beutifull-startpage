@@ -21,9 +21,15 @@
 
   /* ── Elements that already own their contextmenu event ── */
   const OWNED_SELECTORS = [
-    '.bm-card',
-    '.bm-tag[data-tag]',
+    '.bm-tag[data-tag]',   /* tag buttons — opens tag edit popup */
+    /* .bm-card  — handled below via BNT_CTX.show */
+    /* .sc-card  — handled below via BNT_CTX.show */
   ];
+
+  /* ── Helpers ────────────────────────────────────────────────────── */
+  function getDomainFromUrl(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'image'; }
+  }
 
   /* ── Build menu DOM ─────────────────────────────────────────────── */
   const menu = document.createElement('div');
@@ -126,6 +132,7 @@
   /* ── Detect context zone from click target ──────────────────────── */
   function detectZone(target) {
     if (target.closest('#bm-panel')) return 'bookmarks-panel';
+    if (target.closest('#shortcuts-row')) return 'shortcuts';
     return null;
   }
 
@@ -136,6 +143,13 @@
         icon:   ICO.panel,
         label:  "Customize 'Bookmarks Panel'",
         action: () => window.BNT_SETTINGS?.open('bookmarks-panel'),
+      };
+    }
+    if (zone === 'shortcuts') {
+      return {
+        icon:   ICO.settings,
+        label:  'Shortcut Settings',
+        action: () => window.BNT_SETTINGS?.open('shortcuts'),
       };
     }
     return {
@@ -247,4 +261,209 @@
 
   /* ── Expose API ─────────────────────────────────────────────────── */
   window.BNT_CTX = { show, hide };
+
+  /* ══════════════════════════════════════════════════════════════════
+     SHORTCUT CARD — right-click
+     Handles: edit, change image, move forward/back,
+              copy link, download/copy image,
+              move to bookmarks, delete, settings.
+  ══════════════════════════════════════════════════════════════════ */
+  document.addEventListener('contextmenu', e => {
+    const card = e.target.closest('.sc-card');
+    if (!card) return;
+    e.preventDefault();
+    const bmId = card.dataset.id;
+
+    /* ── helpers ── */
+    const scUrl  = () => window.BNT_SC?.getUrl(bmId) ?? '';
+    const scThumb = () => window.BNT_SC?.getThumb(bmId) ?? null;
+
+    async function copyImageToClipboard(src) {
+      try {
+        const resp = await fetch(src);
+        const blob = await resp.blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        window.BNT_TOAST?.show({ title: 'Image copied', type: 'success', duration: 1800 });
+      } catch {
+        window.BNT_TOAST?.show({ title: 'Could not copy image', type: 'error', duration: 2200 });
+      }
+    }
+
+    function downloadImage(src, name) {
+      const a = document.createElement('a');
+      a.href = src; a.download = name || 'shortcut';
+      a.click();
+    }
+
+    const thumbSrc = scThumb();
+    const favSrc   = `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent((() => { try { return new URL(scUrl()).origin; } catch { return scUrl(); } })())}`;
+    const imgSrc   = thumbSrc || favSrc;
+
+    show(e, [
+      /* ── Edit ── */
+      {
+        icon: ICO.edit,
+        label: 'Edit shortcut',
+        action: () => window.BNT_SC?.openEdit(bmId, card, e.clientX, e.clientY),
+      },
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+        label: 'Change image',
+        action: () => window.BNT_SC?.pickThumb(bmId, card),
+      },
+      {
+        icon: ICO.paste,
+        label: 'Paste image',
+        action: async () => {
+          let blob;
+          try {
+            blob = await window.BNT_STORAGE?.readClipboardImage();
+          } catch (err) {
+            console.error('[BNT CTX] clipboard read failed', err);
+            window.BNT_TOAST?.show({ title: 'Could not read clipboard', type: 'error', duration: 2200 });
+            return;
+          }
+          if (!blob) {
+            window.BNT_TOAST?.show({ title: 'No image in clipboard', type: 'error', duration: 2200 });
+            return;
+          }
+          await window.BNT_SC?.setThumbFromBlob(bmId, card, blob);
+          window.BNT_TOAST?.show({ title: 'Image pasted', type: 'success', duration: 1800 });
+        },
+      },
+      null,
+      /* ── Reorder (4) ── */
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+        label: 'Move backward',
+        action: () => window.BNT_SC?.moveBack(bmId),
+      },
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+        label: 'Move forward',
+        action: () => window.BNT_SC?.moveFwd(bmId),
+      },
+      null,
+      /* ── Copy / Download (6) ── */
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+        label: 'Copy link',
+        action: async () => {
+          await navigator.clipboard.writeText(scUrl());
+          window.BNT_TOAST?.show({ title: 'Link copied', type: 'success', duration: 1800 });
+        },
+      },
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+        label: 'Download image',
+        action: () => downloadImage(imgSrc, getDomainFromUrl(scUrl())),
+      },
+      {
+        icon: ICO.copy,
+        label: 'Copy image',
+        action: () => copyImageToClipboard(imgSrc),
+      },
+      null,
+      /* ── Move to bookmarks (5) ── */
+      {
+        icon: ICO.panel,
+        label: 'Move to Bookmarks',
+        action: () => window.BNT_SC?.moveToBookmarks(bmId),
+      },
+      null,
+      /* ── Delete ── */
+      {
+        icon: ICO.trash,
+        label: 'Delete shortcut',
+        danger: true,
+        action: () => window.BNT_SC?.deleteCard(bmId),
+      },
+      null,
+      settingsItem('shortcuts'),
+    ]);
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     SHORTCUT ROW — empty area right-click
+  ══════════════════════════════════════════════════════════════════ */
+  document.addEventListener('contextmenu', e => {
+    const row = e.target.closest('#shortcuts-row');
+    if (!row) return;
+    if (e.target.closest('.sc-card')) return;
+    e.preventDefault();
+    show(e, [
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+        label: 'Add shortcut',
+        action: () => window.BNT_SC?.openAdd(e.clientX, e.clientY),
+      },
+      null,
+      settingsItem('shortcuts'),
+    ]);
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     BOOKMARK CARD — right-click (replaces direct openCardEditPopup call)
+     Handles: edit, copy link, download/copy image,
+              move to shortcuts (5/6), standard open settings.
+  ══════════════════════════════════════════════════════════════════ */
+  document.addEventListener('contextmenu', e => {
+    if (e.target.closest('.bm-card-copy,.bm-card-tag-btn,.bm-card-del,.bm-card-edit-btn')) return;
+    const card = e.target.closest('.bm-card');
+    if (!card) return;
+    e.preventDefault();
+
+    const bmId  = card.dataset.id;
+    const bmUrl = card.dataset.url || card.querySelector('.bm-card-url')?.textContent || '';
+    const favSrc = `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent((() => { try { return new URL(bmUrl).origin; } catch { return bmUrl; } })())}`;
+    const thumbSrc = card.querySelector('.bm-card-bg')?.style.backgroundImage.match(/url\(["']?(.+?)["']?\)/)?.[1] || null;
+    const imgSrc = thumbSrc || favSrc;
+
+    async function copyImageToClipboard(src) {
+      try {
+        const blob = await (await fetch(src)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        window.BNT_TOAST?.show({ title: 'Image copied', type: 'success', duration: 1800 });
+      } catch {
+        window.BNT_TOAST?.show({ title: 'Could not copy image', type: 'error', duration: 2200 });
+      }
+    }
+
+    show(e, [
+      {
+        icon: ICO.edit,
+        label: 'Edit bookmark',
+        action: () => card.querySelector('.bm-card-edit-btn')?.click(),
+      },
+      null,
+      /* ── Copy / Download (6) ── */
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+        label: 'Copy link',
+        action: async () => {
+          await navigator.clipboard.writeText(bmUrl);
+          window.BNT_TOAST?.show({ title: 'Link copied', type: 'success', duration: 1800 });
+        },
+      },
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+        label: 'Download image',
+        action: () => { const a = document.createElement('a'); a.href = imgSrc; a.download = getDomainFromUrl(bmUrl); a.click(); },
+      },
+      {
+        icon: ICO.copy,
+        label: 'Copy image',
+        action: () => copyImageToClipboard(imgSrc),
+      },
+      null,
+      /* ── Move to shortcuts (5) ── */
+      {
+        icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="8" height="8" rx="1"/><rect x="14" y="13" width="8" height="8" rx="1"/><rect x="8" y="2" width="8" height="8" rx="1"/></svg>`,
+        label: 'Move to Shortcuts',
+        action: () => window.BNT_SC?.moveFromBookmarks(bmId),
+      },
+      null,
+      settingsItem('bookmarks-panel'),
+    ]);
+  });
 })();
